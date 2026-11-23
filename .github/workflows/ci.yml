@@ -20,7 +20,7 @@ jobs:
   unit:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Docs bundle builder tests
         run: python3 -m unittest discover -s tools/tests -v
       - name: PHP syntax (8.1 is the oldest PHP the extension allows)
@@ -36,9 +36,9 @@ jobs:
   e2e:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Docs sources (OXT-Beyond and the xTalk Suite, docs only)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: SethMorrowSoftware/OpenXTalk-Beyond
           path: _src/oxt
@@ -46,7 +46,7 @@ jobs:
             /docs/
             /*.md
           sparse-checkout-cone-mode: false
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: SethMorrowSoftware/xtalk-suite
           path: _src/suite
@@ -64,7 +64,7 @@ jobs:
         run: tools/package.sh "$RUNNER_TEMP/dist"
       - name: End-to-end test on the release zip
         run: BEYONDBOT_ZIP=$(ls "$RUNNER_TEMP"/dist/*.zip) tests/e2e/run.sh "$RUNNER_TEMP/phpbb" _src/oxt _src/suite "$RUNNER_TEMP/e2e"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: beyondbot-zip
           path: ${{ runner.temp }}/dist/

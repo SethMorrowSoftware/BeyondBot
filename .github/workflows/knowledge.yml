@@ -25,8 +25,8 @@ jobs:
   publish:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
         with:
           repository: SethMorrowSoftware/OpenXTalk-Beyond
           path: _src/oxt
@@ -34,7 +34,7 @@ jobs:
             /docs/
             /*.md
           sparse-checkout-cone-mode: false
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: SethMorrowSoftware/xtalk-suite
           path: _src/suite
