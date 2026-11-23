@@ -1,0 +1,89 @@
+# Rebuilds Beyond Bot's docs bundle from OXT-Beyond and the xTalk Suite
+# and publishes it on the "knowledge" release, where forums fetch it
+# (the extension's default "Docs bundle address").
+# Safe: reads only the two public docs repositories; its only right is
+# writing this repository's releases. No secrets beyond GITHUB_TOKEN.
+name: knowledge
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"   # Mondays; forums check about once a week
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Publish even if the sources have not changed
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: knowledge
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: SethMorrowSoftware/OpenXTalk-Beyond
+          path: _src/oxt
+          sparse-checkout: |
+            /docs/
+            /*.md
+          sparse-checkout-cone-mode: false
+      - uses: actions/checkout@v4
+        with:
+          repository: SethMorrowSoftware/xtalk-suite
+          path: _src/suite
+          sparse-checkout: |
+            **/*.md
+          sparse-checkout-cone-mode: false
+      - name: Build
+        run: |
+          python3 -m unittest discover -s tools/tests
+          python3 tools/build_knowledge.py --oxt _src/oxt --suite _src/suite \
+            --oxt-ref "$(git -C _src/oxt rev-parse HEAD)" \
+            --suite-ref "$(git -C _src/suite rev-parse HEAD)" --out _out
+          cat _out/manifest.json
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          tag=knowledge
+          if ! gh release view "$tag" > /dev/null 2>&1; then
+            gh release create "$tag" --title "Beyond Bot docs bundle" --latest=false \
+              --notes "The docs index Beyond Bot forums download. Rebuilt weekly from OXT-Beyond and the xTalk Suite by .github/workflows/knowledge.yml."
+          fi
+          old=""
+          if gh release download "$tag" -p manifest.json -O _old.json 2> /dev/null; then
+            # Same sources and same primer and builder: nothing to publish
+            # (built_at alone differs, and would make every forum reload).
+            if [ "$FORCE" != "true" ] && python3 - <<'PY'
+          import json, sys
+          a, b = json.load(open("_old.json")), json.load(open("_out/manifest.json"))
+          same = a.get("sources") == b.get("sources") and a.get("builder") == b.get("builder")
+          sys.exit(0 if same else 1)
+          PY
+            then
+              echo "Sources unchanged; nothing published."
+              exit 0
+            fi
+            old=$(python3 -c 'import json; print(json.load(open("_old.json"))["file"])')
+          fi
+          new=$(python3 -c 'import json; print(json.load(open("_out/manifest.json"))["file"])')
+          # Bundle first, manifest second: a forum never sees a manifest
+          # whose file is not there yet. Keep the previous bundle, in case
+          # a forum is downloading it right now; drop older ones.
+          gh release upload "$tag" "_out/$new" --clobber
+          gh release upload "$tag" _out/manifest.json --clobber
+          for asset in $(gh release view "$tag" --json assets -q '.assets[].name'); do
+            case "$asset" in
+              manifest.json|"$new"|"$old") ;;
+              beyondbot-knowledge-*) gh release delete-asset "$tag" "$asset" --yes ;;
+            esac
+          done

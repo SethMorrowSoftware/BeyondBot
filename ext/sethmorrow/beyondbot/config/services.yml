@@ -1,0 +1,88 @@
+services:
+    sethmorrow.beyondbot.settings:
+        class: sethmorrow\beyondbot\core\settings
+        arguments:
+            - '@config'
+            - '@config_text'
+
+    sethmorrow.beyondbot.store:
+        class: sethmorrow\beyondbot\core\store
+        arguments:
+            - '@dbal.conn'
+            - '%core.table_prefix%'
+
+    sethmorrow.beyondbot.knowledge:
+        class: sethmorrow\beyondbot\core\knowledge_base
+        arguments:
+            - '@dbal.conn'
+            - '@config'
+            - '%core.table_prefix%'
+
+    sethmorrow.beyondbot.kb_updater:
+        class: sethmorrow\beyondbot\core\kb_updater
+        arguments:
+            - '@config'
+            - '@config_text'
+            - '@sethmorrow.beyondbot.knowledge'
+            - '@dbal.conn'
+            - '%core.root_path%'
+
+    sethmorrow.beyondbot.forum:
+        class: sethmorrow\beyondbot\core\forum
+        arguments:
+            - '@dbal.conn'
+            - '@user'
+            - '@auth'
+            - '@text_formatter.utils'
+            - '%core.root_path%'
+            - '%core.php_ext%'
+
+    sethmorrow.beyondbot.gateway_factory:
+        class: sethmorrow\beyondbot\core\gateway_factory
+        arguments:
+            - '%core.root_path%'
+
+    sethmorrow.beyondbot.worker:
+        class: sethmorrow\beyondbot\core\worker
+        arguments:
+            - '@sethmorrow.beyondbot.settings'
+            - '@sethmorrow.beyondbot.store'
+            - '@sethmorrow.beyondbot.forum'
+            - '@sethmorrow.beyondbot.knowledge'
+            - '@language'
+            - '@log'
+            - '@sethmorrow.beyondbot.gateway_factory'
+
+    sethmorrow.beyondbot.listener:
+        class: sethmorrow\beyondbot\event\listener
+        arguments:
+            - '@sethmorrow.beyondbot.settings'
+            - '@sethmorrow.beyondbot.store'
+            - '@text_formatter.utils'
+            - '@user'
+        tags:
+            - { name: event.listener }
+
+    sethmorrow.beyondbot.cron.task.process_queue:
+        class: sethmorrow\beyondbot\cron\task\process_queue
+        arguments:
+            - '@config'
+            - '@dbal.conn'
+            - '@sethmorrow.beyondbot.store'
+            - '@sethmorrow.beyondbot.worker'
+        calls:
+            - [set_name, [cron.task.beyondbot_process_queue]]
+        tags:
+            - { name: cron.task }
+
+    sethmorrow.beyondbot.cron.task.refresh_knowledge:
+        class: sethmorrow\beyondbot\cron\task\refresh_knowledge
+        arguments:
+            - '@config'
+            - '@dbal.conn'
+            - '@sethmorrow.beyondbot.kb_updater'
+            - '@log'
+        calls:
+            - [set_name, [cron.task.beyondbot_refresh_knowledge]]
+        tags:
+            - { name: cron.task }

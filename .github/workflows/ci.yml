@@ -1,0 +1,70 @@
+# Tests on every pull request and push to main.
+# Safe: runs only this repository's own code, with read-only permissions
+# and no secrets. Claude is never called: the end-to-end test answers
+# with tests/e2e/fake_anthropic.php.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Docs bundle builder tests
+        run: python3 -m unittest discover -s tools/tests -v
+      - name: PHP syntax (8.1 is the oldest PHP the extension allows)
+        run: |
+          php --version
+          find ext -path ext/sethmorrow/beyondbot/vendor -prune -o -name '*.php' -print0 \
+            | xargs -0 -n1 php -l > /dev/null
+      - name: PHP unit tests
+        run: |
+          composer install --no-interaction --no-progress
+          vendor/bin/phpunit
+
+  e2e:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Docs sources (OXT-Beyond and the xTalk Suite, docs only)
+        uses: actions/checkout@v4
+        with:
+          repository: SethMorrowSoftware/OpenXTalk-Beyond
+          path: _src/oxt
+          sparse-checkout: |
+            /docs/
+            /*.md
+          sparse-checkout-cone-mode: false
+      - uses: actions/checkout@v4
+        with:
+          repository: SethMorrowSoftware/xtalk-suite
+          path: _src/suite
+          sparse-checkout: |
+            **/*.md
+          sparse-checkout-cone-mode: false
+      - name: PHP modules phpBB needs
+        run: |
+          missing=""
+          for m in sqlite3 mbstring xml curl zip intl gd; do php -m | grep -qix "$m" || missing="$missing php8.3-$m"; done
+          if [ -n "$missing" ]; then sudo apt-get update -q && sudo apt-get install -yq $missing; fi
+      - name: phpBB 3.3
+        run: composer create-project --no-interaction --no-progress --no-dev phpbb/phpbb:3.3.* "$RUNNER_TEMP/phpbb"
+      - name: Release zip
+        run: tools/package.sh "$RUNNER_TEMP/dist"
+      - name: End-to-end test on the release zip
+        run: BEYONDBOT_ZIP=$(ls "$RUNNER_TEMP"/dist/*.zip) tests/e2e/run.sh "$RUNNER_TEMP/phpbb" _src/oxt _src/suite "$RUNNER_TEMP/e2e"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: beyondbot-zip
+          path: ${{ runner.temp }}/dist/
