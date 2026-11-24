@@ -27,6 +27,7 @@ import json
 import math
 import os
 import re
+import urllib.parse
 import sys
 from collections import Counter
 
@@ -38,6 +39,10 @@ TITLE_BOOST = 3         # title words count this many times
 
 OXT_REPO = "SethMorrowSoftware/OpenXTalk-Beyond"
 SUITE_REPO = "SethMorrowSoftware/xtalk-suite"
+# The online Dictionary opens at an entry from ?entry=<name>&type=<type>
+# (OXT-Beyond tools/pages/build_dictionary.py, the same link the forum's
+# [dict] tag makes), so a reader lands on the page, not the .lcdoc source.
+DICTIONARY_URL = "https://sethmorrowsoftware.github.io/OpenXTalk-Beyond/dictionary/"
 
 STOPWORDS = frozenset("""
 a an and are as at be but by can do does for from has have how i if in into is
@@ -105,6 +110,11 @@ def cut(text, url):
     return text[:MAX_CHUNK_CHARS].rsplit("\n", 1)[0] + f"\n[... continues at {url}]"
 
 
+def dictionary_url(name, kind):
+    query = urllib.parse.urlencode({"entry": name, "type": kind}, quote_via=urllib.parse.quote)
+    return DICTIONARY_URL + "?" + query
+
+
 def dictionary_chunk(path, rel, ref):
     with open(path, encoding="utf-8", errors="replace") as f:
         fields = parse_lcdoc(f.read())
@@ -112,7 +122,7 @@ def dictionary_chunk(path, rel, ref):
     kind = fields.get("Type", "").strip() or "entry"
     if not name:
         return None
-    url = f"https://github.com/{OXT_REPO}/blob/{ref}/{rel}"
+    url = dictionary_url(name, kind)
     parts = [f"{name} ({kind})"]
     for key in ("Syntax", "Summary", "Synonyms", "Introduced", "OS", "Platforms",
                 "Example", "Parameters", "The result", "It", "Value", "Description",

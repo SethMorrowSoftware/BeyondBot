@@ -122,7 +122,8 @@ class Trees(unittest.TestCase):
         c = put[0]
         self.assertEqual(c["kind"], "dictionary")
         self.assertEqual(c["title"], "put (command)")
-        self.assertEqual(c["url"], "https://github.com/SethMorrowSoftware/OpenXTalk-Beyond/blob/abc123/docs/dictionary/command/put.lcdoc")
+        # the online Dictionary's own page for the entry, not the .lcdoc source
+        self.assertEqual(c["url"], "https://sethmorrowsoftware.github.io/OpenXTalk-Beyond/dictionary/?entry=put&type=command")
         self.assertIn('put "Hello" into field "Greeting"', c["text"])
         # <refs> are made plain, <a|b> keeps the shown words
         self.assertIn("contents of a variables or field", c["text"])
@@ -134,6 +135,15 @@ class Trees(unittest.TestCase):
         self.assertEqual(aiff["kind"], "glossary")
         self.assertIn("Mac OS systems", aiff["text"])
         self.assertNotIn("Mac OS|", aiff["text"])
+        self.assertEqual(aiff["url"], "https://sethmorrowsoftware.github.io/OpenXTalk-Beyond/dictionary/?entry=AIFF&type=glossary")
+
+    def test_dictionary_url_quotes_names_and_types(self):
+        self.assertEqual(bk.dictionary_url("open file", "command"),
+                         "https://sethmorrowsoftware.github.io/OpenXTalk-Beyond/dictionary/?entry=open%20file&type=command")
+        self.assertEqual(bk.dictionary_url("repeat", "control structure"),
+                         "https://sethmorrowsoftware.github.io/OpenXTalk-Beyond/dictionary/?entry=repeat&type=control%20structure")
+        self.assertEqual(bk.dictionary_url("&", "operator"),
+                         "https://sethmorrowsoftware.github.io/OpenXTalk-Beyond/dictionary/?entry=%26&type=operator")
 
     def test_markdown_split_by_heading_and_fence_respected(self):
         b = self.build()
