@@ -1,7 +1,7 @@
 {
 	"stable": {
 		"1.0": {
-			"current": "1.0.3",
+			"current": "1.0.4",
 			"download": "https://github.com/SethMorrowSoftware/BeyondBot/releases",
 			"announcement": "https://github.com/SethMorrowSoftware/BeyondBot/releases",
 			"eol": null,

@@ -27,6 +27,7 @@ require $phpbb_root_path . 'common.php';
 require_once $phpbb_root_path . 'includes/functions_user.php';
 require_once $phpbb_root_path . 'includes/functions_posting.php';
 require_once $phpbb_root_path . 'includes/functions_admin.php';
+require_once $phpbb_root_path . 'includes/functions_content.php';
 
 $user->session_begin(false);
 $auth->acl($user->data);
@@ -139,7 +140,7 @@ function run_queue(): void
 function bot_posts(int $topic_id): array
 {
 	global $config;
-	return all('SELECT post_id, post_text FROM ' . POSTS_TABLE . ' WHERE topic_id = ' . $topic_id . ' AND poster_id = ' . (int) $config['beyondbot_user_id'] . ' ORDER BY post_id');
+	return all('SELECT post_id, post_text, bbcode_uid, bbcode_bitfield FROM ' . POSTS_TABLE . ' WHERE topic_id = ' . $topic_id . ' AND poster_id = ' . (int) $config['beyondbot_user_id'] . ' ORDER BY post_id');
 }
 
 function fake_requests(): array
@@ -360,6 +361,16 @@ check(str_contains($inj_src, 'Read [dict]open file[/dict] and [b]the "x"[/b].'),
 check(str_contains((string) $inj[0]['post_text'], 'oxt-dict') || str_contains($utils->unparse($inj[0]['post_text']), '[dict]'), '[dict] is stored as the board tag', (string) ($inj[0]['post_text'] ?? ''));
 check(!str_contains($inj_src, '[quote'), 'a question that is still the last post is not quoted', $inj_src);
 check(!str_contains($inj_src, '[size=200]') && !str_contains($inj_src, '[color=red]'), 'BBCodes outside the short list are unwrapped');
+if ($inj)
+{
+	$shown = generate_text_for_display($inj[0]['post_text'], $inj[0]['bbcode_uid'], $inj[0]['bbcode_bitfield'], OPTION_FLAG_BBCODE);
+	$plain = html_entity_decode(strip_tags($shown), ENT_QUOTES);
+	check(str_contains($plain, 'Sort by tArray[each], then read tData[i] and keep going.'), 'array keys in prose show as written, and copy as written', $plain);
+	// The footer is italic on purpose; the rest of the line after tData[i] may not be.
+	$after = substr($shown, (int) strpos($shown, 'read tData'));
+	$after = substr($after, 0, (int) strpos($after, '<br'));
+	check($after !== '' && !preg_match('#<em[\s>]#', $after), 'tData[i] in prose does not turn the rest of the post italic', $after);
+}
 $queued_from_reply = $inj ? queued((int) $inj[0]['post_id']) : null;
 check($queued_from_reply === null, "the bot's own reply is never queued");
 

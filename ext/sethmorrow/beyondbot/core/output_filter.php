@@ -37,10 +37,14 @@ class output_filter
 
 	/**
 	 * Put after a [ that must not open a tag. phpBB has no escape for
-	 * BBCode, but a zero-width space between [ and the name looks the same
-	 * and parses as plain text.
+	 * BBCode, and phpBB closes an unclosed [b] or [i] at the end of the
+	 * post by itself, so "tData[i]" in prose turned the rest of it
+	 * italic. An empty bold pair between [ and the name splits the tag:
+	 * the reader sees "tData[i]", and copying it gives exactly that.
+	 * (1.0.3 used a zero-width space here, which came along when a
+	 * reader copied the name into a script.)
 	 */
-	public const DEFUSE = "\u{200B}";
+	public const DEFUSE = '[b][/b]';
 
 	public const DEFAULT_DOMAINS = [
 		'openxtalk.org',

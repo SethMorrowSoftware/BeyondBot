@@ -168,8 +168,11 @@ final class OutputFilterTest extends TestCase
 		$this->assertStringContainsString('tData[' . $z . 'i]', $out);
 		$this->assertStringContainsString('tArr[' . $z . 'b]', $out);
 		$this->assertStringContainsString('[' . $z . '/u]', $out);
-		// Nothing left that phpBB would read as an open tag.
-		$this->assertDoesNotMatchRegularExpression('#\[(b|i|u)\]#', $out);
+		// Nothing left that phpBB would read as an unpaired tag: only the
+		// empty bold pairs themselves. (The e2e test renders it in phpBB.)
+		$this->assertDoesNotMatchRegularExpression('#\[(i|u)\]#', $out);
+		$this->assertSame(substr_count($out, '[b]'), substr_count($out, '[/b]'));
+		$this->assertStringNotContainsString("\u{200B}", $out, 'nothing invisible that a reader would copy');
 		// What a reader sees is the text as written.
 		$this->assertSame("Inside the loop, tArray[each] is that key's value.\n\nRead tData[i] and tArr[b] here. A lone [/u] too.", str_replace($z, '', $out));
 	}

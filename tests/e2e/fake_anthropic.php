@@ -85,6 +85,7 @@ if (str_contains($first, 'MARKER_INJECT'))
 		. "[code]put \"[img]x[/img]\" into field 1[/code]\n"
 		. "Use [code]repeat for each line[/code] for speed.\n"
 		. "Read [dict]open file[/dict] and [dict]the \"x\"[/dict].\n"
+		. "Sort by tArray[each], then read tData[i] and keep going.\n"
 		. "[size=200]big[/size] [color=red]red[/color]",
 	]], 'end_turn', $model);
 }
