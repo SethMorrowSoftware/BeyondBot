@@ -67,12 +67,12 @@
 <fieldset>
 	<legend>{{ lang('ACP_BEYONDBOT_WHERE') }}</legend>
 	<dl>
-		<dt><label for="beyondbot_forum_ids">{{ lang('ACP_BEYONDBOT_FORUMS') ~ lang('COLON') }}</label><br><span>{{ lang('ACP_BEYONDBOT_FORUMS_EXPLAIN') }}</span></dt>
-		<dd><select id="beyondbot_forum_ids" name="beyondbot_forum_ids[]" multiple="multiple" size="12">{{ S_FORUM_OPTIONS }}</select></dd>
+		<dt><label>{{ lang('ACP_BEYONDBOT_FORUMS') ~ lang('COLON') }}</label><br><span>{{ lang('ACP_BEYONDBOT_FORUMS_EXPLAIN') }}</span></dt>
+		<dd><div id="beyondbot_forum_ids" style="max-height: 20em; overflow-y: auto;">{{ S_FORUM_CHECKLIST }}</div></dd>
 	</dl>
 	<dl>
-		<dt><label for="beyondbot_group_ids">{{ lang('ACP_BEYONDBOT_GROUPS') ~ lang('COLON') }}</label><br><span>{{ lang('ACP_BEYONDBOT_GROUPS_EXPLAIN') }}</span></dt>
-		<dd><select id="beyondbot_group_ids" name="beyondbot_group_ids[]" multiple="multiple" size="6">{{ S_GROUP_OPTIONS }}</select></dd>
+		<dt><label>{{ lang('ACP_BEYONDBOT_GROUPS') ~ lang('COLON') }}</label><br><span>{{ lang('ACP_BEYONDBOT_GROUPS_EXPLAIN') }}</span></dt>
+		<dd><div id="beyondbot_group_ids" style="max-height: 12em; overflow-y: auto;">{{ S_GROUP_CHECKLIST }}</div></dd>
 	</dl>
 	<dl>
 		<dt><label for="beyondbot_min_posts">{{ lang('ACP_BEYONDBOT_MIN_POSTS') ~ lang('COLON') }}</label><br><span>{{ lang('ACP_BEYONDBOT_MIN_POSTS_EXPLAIN') }}</span></dt>

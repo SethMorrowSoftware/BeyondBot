@@ -185,8 +185,8 @@ class main_module
 			'BEYONDBOT_ENABLED' => (bool) $config['beyondbot_enabled'],
 			'BEYONDBOT_KEY_SET' => $key !== '',
 			'BEYONDBOT_KEY_HINT' => $key !== '' ? '...' . substr($key, -4) : '',
-			'S_FORUM_OPTIONS' => make_forum_select($forum_ids, false, false, true, true, false, false),
-			'S_GROUP_OPTIONS' => $this->group_options($c, $group_ids),
+			'S_FORUM_CHECKLIST' => checklist::render('beyondbot_forum_ids', checklist::forum_items(make_forum_select($forum_ids, false, false, true, true, false, true))),
+			'S_GROUP_CHECKLIST' => checklist::render('beyondbot_group_ids', $this->group_items($c, $group_ids)),
 			'S_MODEL_OPTIONS' => $models,
 			'S_EFFORT_OPTIONS' => $efforts,
 			'BEYONDBOT_CUSTOM_MODEL' => $config['beyondbot_custom_model'],
@@ -219,12 +219,12 @@ class main_module
 		]);
 	}
 
-	protected function group_options($c, array $selected): string
+	protected function group_items($c, array $selected): array
 	{
 		$db = $c->get('dbal.conn');
 		$language = $c->get('language');
 		$result = $db->sql_query('SELECT group_id, group_name, group_type FROM ' . GROUPS_TABLE . ' ORDER BY group_type DESC, group_name ASC');
-		$out = '';
+		$items = [];
 		while ($row = $db->sql_fetchrow($result))
 		{
 			if ($row['group_name'] === 'GUESTS' || $row['group_name'] === 'BOTS')
@@ -232,10 +232,14 @@ class main_module
 				continue;
 			}
 			$name = (int) $row['group_type'] === GROUP_SPECIAL ? $language->lang('G_' . $row['group_name']) : $row['group_name'];
-			$out .= '<option value="' . (int) $row['group_id'] . '"' . (in_array((int) $row['group_id'], $selected, true) ? ' selected="selected"' : '') . '>' . htmlspecialchars($name, ENT_COMPAT, 'UTF-8') . '</option>';
+			$items[] = [
+				'id' => (int) $row['group_id'],
+				'label' => htmlspecialchars($name, ENT_COMPAT, 'UTF-8'),
+				'checked' => in_array((int) $row['group_id'], $selected, true),
+			];
 		}
 		$db->sql_freeresult($result);
-		return $out;
+		return $items;
 	}
 
 	protected function log_page($c, $language)

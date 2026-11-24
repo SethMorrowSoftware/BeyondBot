@@ -45,9 +45,9 @@ $lang = array_merge($lang, [
 
 	'ACP_BEYONDBOT_WHERE' => 'Where and who',
 	'ACP_BEYONDBOT_FORUMS' => 'Forums it answers in',
-	'ACP_BEYONDBOT_FORUMS_EXPLAIN' => 'Only these forums. Subforums are not included unless chosen too. Hold Ctrl (Cmd on a Mac) to choose more than one.',
+	'ACP_BEYONDBOT_FORUMS_EXPLAIN' => 'Only these forums. Subforums are not included unless chosen too. Tick each one it should answer in.',
 	'ACP_BEYONDBOT_GROUPS' => 'Who may ask',
-	'ACP_BEYONDBOT_GROUPS_EXPLAIN' => 'Members of any chosen group. Choose none to let any member ask.',
+	'ACP_BEYONDBOT_GROUPS_EXPLAIN' => 'Members of any ticked group. Tick none to let any member ask.',
 	'ACP_BEYONDBOT_MIN_POSTS' => 'Posts a member needs first',
 	'ACP_BEYONDBOT_MIN_POSTS_EXPLAIN' => 'Keeps brand-new and throwaway accounts from using the bot.',
 	'ACP_BEYONDBOT_BLOCKED_TOPICS' => 'Topics it never answers in',
