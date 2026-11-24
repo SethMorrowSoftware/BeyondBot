@@ -51,6 +51,7 @@ class output_filter
 		// Control characters other than newline and tab never belong in a post.
 		$text = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $text) ?? '';
 		$text = $this->markdown_to_bbcode($text);
+		$text = $this->inline_code_to_bold($text);
 
 		// Work outside [code] blocks only: code is shown as written.
 		$parts = preg_split('#(\[code(?:=[^\]]*)?\].*?\[/code\])#is', $text, -1, PREG_SPLIT_DELIM_CAPTURE);
@@ -104,6 +105,27 @@ class output_filter
 			$parts[$i] = $part;
 		}
 		return implode('', $parts);
+	}
+
+	/**
+	 * phpBB has no inline code: [code] is always a full-width box with a
+	 * "Code: Select all" bar, so a name in [code] mid-sentence breaks the
+	 * line into boxes. A one-line [code] that shares its line with other
+	 * words becomes [b]; one on a line of its own stays a code block.
+	 */
+	protected function inline_code_to_bold(string $text): string
+	{
+		return preg_replace_callback('#\[code\]([^\n]*?)\[/code\]#i', static function ($m) use ($text) {
+			[$whole, $at] = $m[0];
+			$line_start = strrpos(substr($text, 0, $at), "\n");
+			$before = substr($text, $line_start === false ? 0 : $line_start + 1, $at - ($line_start === false ? 0 : $line_start + 1));
+			$end = $at + strlen($whole);
+			$line_end = strpos($text, "\n", $end);
+			$after = substr($text, $end, ($line_end === false ? strlen($text) : $line_end) - $end);
+			$inline = trim($before) !== '' || trim($after) !== '';
+			$inner = trim($m[1][0]);
+			return ($inline && $inner !== '') ? '[b]' . $inner . '[/b]' : $whole;
+		}, $text, -1, $count, PREG_OFFSET_CAPTURE) ?? $text;
 	}
 
 	public function url_allowed(string $url): bool

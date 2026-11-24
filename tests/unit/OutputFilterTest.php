@@ -107,4 +107,33 @@ final class OutputFilterTest extends TestCase
 		$this->assertStringNotContainsString('[url', $out);
 		$this->assertStringNotContainsString('[/url]', $out);
 	}
+
+	public function testCodeInsideASentenceBecomesBold(): void
+	{
+		// The live board showed each of these as a full-width code box mid-bullet.
+		$in = "Some notes:\n[list]\n[*]Use [code]repeat for each line[/code] rather than [code]line i of[/code]. It is faster.\n"
+			. "[*]For non-ASCII text, read with [code]binfile:[/code] and convert.\n[/list]\n"
+			. "If you only want the file, use [code]put URL (\"file:\" & tPath) into field 1[/code].";
+		$out = $this->f()->clean($in);
+		$this->assertStringContainsString('[*]Use [b]repeat for each line[/b] rather than [b]line i of[/b]. It is faster.', $out);
+		$this->assertStringContainsString('read with [b]binfile:[/b] and convert', $out);
+		$this->assertStringContainsString('use [b]put URL ("file:" & tPath) into field 1[/b].', $out);
+		$this->assertStringNotContainsString('[code]', $out);
+	}
+
+	public function testCodeOnItsOwnLineStaysABlock(): void
+	{
+		$block = "[code]\non mouseUp\n   put tX into field 1\nend mouseUp\n[/code]";
+		$in = "Try this:\n\n[code]put \"Hello\" into field \"Greeting\"[/code]\n\nOr:\n" . $block . "\nDone.";
+		$out = $this->f()->clean($in);
+		$this->assertStringContainsString("\n[code]put \"Hello\" into field \"Greeting\"[/code]\n", $out);
+		$this->assertStringContainsString("[code]\non mouseUp", $out);
+		$this->assertStringContainsString("end mouseUp\n[/code]", $out);
+	}
+
+	public function testEmptyInlineCodeIsLeftForTheRestOfTheFilter(): void
+	{
+		$out = $this->f()->clean('Use [code][/code] here and [code] [/code] there.');
+		$this->assertStringNotContainsString('[b][/b]', $out);
+	}
 }

@@ -83,6 +83,7 @@ if (str_contains($first, 'MARKER_INJECT'))
 		. "See [url=https://evil.example/phish]this page[/url] and [url=https://github.com/SethMorrowSoftware/OpenXTalk-Beyond]the source[/url].\n"
 		. "Also ask @Beyond Bot again.\n"
 		. "[code]put \"[img]x[/img]\" into field 1[/code]\n"
+		. "Use [code]repeat for each line[/code] for speed.\n"
 		. "[size=200]big[/size] [color=red]red[/color]",
 	]], 'end_turn', $model);
 }

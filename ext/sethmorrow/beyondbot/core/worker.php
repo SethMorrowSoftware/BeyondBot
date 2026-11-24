@@ -251,9 +251,17 @@ class worker
 		return 'failed';
 	}
 
-	/** A short quote of the question, so readers see what the bot answers. */
+	/**
+	 * A short quote of the question, so readers see what the bot answers
+	 * once the topic has moved on. When the question is still the last post,
+	 * the reply sits right under it and a quote would only repeat it.
+	 */
 	protected function quote(array $q): string
 	{
+		if (!$this->forum->has_later_posts((int) $q['topic_id'], (int) $q['post_id']))
+		{
+			return '';
+		}
 		$words = trim(preg_replace('/\s+/u', ' ', (string) $q['own_words']) ?? '');
 		if (mb_strlen($words) > 300)
 		{
