@@ -1,0 +1,36 @@
+{% include 'overall_header.html' %}
+
+<h1>{{ lang('ACP_BEYONDBOT_LOG') }}</h1>
+<p>{{ lang('ACP_BEYONDBOT_LOG_INTRO', TOTAL, MONTH_SPENT|e) }}</p>
+
+{% if loops.log|length %}
+<table class="table1 zebra-table">
+	<thead>
+	<tr>
+		<th>{{ lang('ACP_BEYONDBOT_LOG_TIME') }}</th>
+		<th>{{ lang('ACP_BEYONDBOT_LOG_ASKER') }}</th>
+		<th>{{ lang('ACP_BEYONDBOT_LOG_OUTCOME') }}</th>
+		<th>{{ lang('ACP_BEYONDBOT_LOG_COST') }}</th>
+		<th>{{ lang('ACP_BEYONDBOT_LOG_QUERIES') }}</th>
+	</tr>
+	</thead>
+	<tbody>
+	{% for row in loops.log %}
+	<tr>
+		<td>{{ row.TIME }}</td>
+		<td>{{ row.ASKER }}
+			{% if row.U_POST %}<br><a href="{{ row.U_POST }}">{{ lang('ACP_BEYONDBOT_LOG_QUESTION') }}</a>{% endif %}
+			{% if row.U_REPLY %} &middot; <a href="{{ row.U_REPLY }}">{{ lang('ACP_BEYONDBOT_LOG_REPLY') }}</a>{% endif %}</td>
+		<td><strong>{{ row.OUTCOME|e }}</strong>{% if row.DETAIL %}<br>{{ row.DETAIL|e }}{% endif %}</td>
+		<td>{% if row.MODEL %}{{ row.MODEL|e }}<br>{{ row.TOKENS|e }}<br>{{ row.COST|e }}{% if row.SECONDS %}, {{ row.SECONDS }} s{% endif %}{% endif %}</td>
+		<td>{{ row.QUERIES|e }}</td>
+	</tr>
+	{% endfor %}
+	</tbody>
+</table>
+<div class="pagination">{% include 'pagination.html' %}</div>
+{% else %}
+<p>{{ lang('ACP_BEYONDBOT_LOG_EMPTY') }}</p>
+{% endif %}
+
+{% include 'overall_footer.html' %}

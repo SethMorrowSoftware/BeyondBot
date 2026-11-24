@@ -1,0 +1,9 @@
+# Composer installs: the dev tools at the root, the extension's runtime
+# libraries inside it. The release zip (tools/package.sh) carries the
+# extension's vendor/; the repository never does.
+/vendor/
+/ext/sethmorrow/beyondbot/vendor/
+/build/
+.phpunit.result.cache
+.phpunit.cache/
+__pycache__/

@@ -1,0 +1,44 @@
+{
+	"name": "sethmorrow/beyondbot",
+	"type": "phpbb-extension",
+	"description": "Beyond Bot: a forum member, powered by Claude, that answers OpenXTalk and xTalk Suite questions when someone writes @Beyond Bot in chosen forums.",
+	"homepage": "https://github.com/SethMorrowSoftware/BeyondBot",
+	"version": "1.0.0",
+	"time": "2026-11-23",
+	"license": "GPL-2.0-only",
+	"authors": [
+		{
+			"name": "Seth Morrow",
+			"homepage": "https://github.com/SethMorrowSoftware",
+			"role": "Lead Developer"
+		}
+	],
+	"require": {
+		"php": ">=8.1",
+		"anthropic-ai/sdk": "^1.13",
+		"nyholm/psr7": "^1.8",
+		"php-http/curl-client": "^2.3",
+		"psr/http-message": "1.1.*",
+		"psr/log": "^1.1"
+	},
+	"config": {
+		"platform": {
+			"php": "8.1.0"
+		},
+		"allow-plugins": {
+			"php-http/discovery": false
+		},
+		"optimize-autoloader": true
+	},
+	"extra": {
+		"display-name": "Beyond Bot",
+		"soft-require": {
+			"phpbb/phpbb": ">=3.3.0,<4.0.0@dev"
+		},
+		"version-check": {
+			"host": "raw.githubusercontent.com",
+			"directory": "/SethMorrowSoftware/BeyondBot/main",
+			"filename": "version.json"
+		}
+	}
+}

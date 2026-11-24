@@ -1,0 +1,163 @@
+{% include 'overall_header.html' %}
+
+<h1>{{ lang('ACP_BEYONDBOT_TITLE') }}</h1>
+<p>{{ lang('ACP_BEYONDBOT_INTRO') }}</p>
+
+{% if ERRORS %}
+<div class="errorbox"><p>{{ ERRORS }}</p></div>
+{% endif %}
+
+<form id="beyondbot_status" method="post" action="{{ U_ACTION }}">
+<fieldset>
+	<legend>{{ lang('ACP_BEYONDBOT_STATUS') }}</legend>
+	<dl>
+		<dt><label>{{ lang('ACP_BEYONDBOT_STATUS_SPENT') }}</label></dt>
+		<dd>{{ STATUS_SPENT|e }} / {{ STATUS_CAP|e }}</dd>
+	</dl>
+	<dl>
+		<dt><label>{{ lang('ACP_BEYONDBOT_STATUS_PENDING') }}</label></dt>
+		<dd>{{ STATUS_PENDING }}</dd>
+	</dl>
+	<dl>
+		<dt><label>{{ lang('ACP_BEYONDBOT_STATUS_LAST_RUN') }}</label></dt>
+		<dd>{% if STATUS_CRON_LAST %}{{ STATUS_CRON_LAST }}{% else %}{{ lang('ACP_BEYONDBOT_STATUS_NEVER') }}{% endif %}</dd>
+	</dl>
+	<dl>
+		<dt><label>{{ lang('ACP_BEYONDBOT_STATUS_DOCS') }}</label></dt>
+		<dd>
+			{% if STATUS_KB_CHUNKS %}{{ lang('ACP_BEYONDBOT_STATUS_DOCS_LOADED', STATUS_KB_CHUNKS, STATUS_KB_BUILT|e, STATUS_KB_RELEASE|e) }}{% else %}{{ lang('ACP_BEYONDBOT_STATUS_DOCS_NONE') }}{% endif %}
+			{% if STATUS_KB_STATE != 'idle' %} ({{ STATUS_KB_STATE|e }}){% endif %}
+			<br><input class="button2" type="submit" name="update_docs" value="{{ lang('ACP_BEYONDBOT_UPDATE_DOCS') }}">
+		</dd>
+	</dl>
+	{% if U_BOT_PROFILE %}
+	<dl>
+		<dt><label>{{ lang('ACP_BEYONDBOT_BOT_MEMBER') }}</label></dt>
+		<dd><a href="{{ U_BOT_PROFILE }}">{{ STATUS_BOT_NAME|e }}</a></dd>
+	</dl>
+	{% endif %}
+	{% if STATUS_LAST_ERROR %}
+	<dl>
+		<dt><label>{{ lang('ACP_BEYONDBOT_STATUS_ERROR') }}</label></dt>
+		<dd><span class="error">{{ STATUS_LAST_ERROR|e }}</span><br>
+			<input class="button2" type="submit" name="clear_error" value="{{ lang('ACP_BEYONDBOT_CLEAR_ERROR') }}"></dd>
+	</dl>
+	{% endif %}
+	{{ S_FORM_TOKEN }}
+</fieldset>
+</form>
+
+<form id="beyondbot_settings" method="post" action="{{ U_ACTION }}" autocomplete="off">
+<fieldset>
+	<legend>{{ lang('ACP_BEYONDBOT_GENERAL') }}</legend>
+	<dl>
+		<dt><label for="beyondbot_enabled">{{ lang('ACP_BEYONDBOT_ENABLED') ~ lang('COLON') }}</label><br><span>{{ lang('ACP_BEYONDBOT_ENABLED_EXPLAIN') }}</span></dt>
+		<dd><label><input type="radio" class="radio" id="beyondbot_enabled" name="beyondbot_enabled" value="1"{% if BEYONDBOT_ENABLED %} checked="checked"{% endif %}> {{ lang('YES') }}</label>
+			<label><input type="radio" class="radio" name="beyondbot_enabled" value="0"{% if not BEYONDBOT_ENABLED %} checked="checked"{% endif %}> {{ lang('NO') }}</label></dd>
+	</dl>
+	<dl>
+		<dt><label for="beyondbot_api_key">{{ lang('ACP_BEYONDBOT_API_KEY') ~ lang('COLON') }}</label><br><span>{{ lang('ACP_BEYONDBOT_API_KEY_EXPLAIN') }}</span></dt>
+		<dd><input type="password" class="inputbox" id="beyondbot_api_key" name="beyondbot_api_key" value="" size="50" autocomplete="new-password"><br>
+			{% if BEYONDBOT_KEY_SET %}{{ lang('ACP_BEYONDBOT_KEY_SAVED', BEYONDBOT_KEY_HINT|e) }}
+			<label><input type="checkbox" class="radio" name="beyondbot_remove_key" value="1"> {{ lang('ACP_BEYONDBOT_REMOVE_KEY') }}</label>
+			{% else %}{{ lang('ACP_BEYONDBOT_KEY_NONE') }}{% endif %}</dd>
+	</dl>
+</fieldset>
+
+<fieldset>
+	<legend>{{ lang('ACP_BEYONDBOT_WHERE') }}</legend>
+	<dl>
+		<dt><label for="beyondbot_forum_ids">{{ lang('ACP_BEYONDBOT_FORUMS') ~ lang('COLON') }}</label><br><span>{{ lang('ACP_BEYONDBOT_FORUMS_EXPLAIN') }}</span></dt>
+		<dd><select id="beyondbot_forum_ids" name="beyondbot_forum_ids[]" multiple="multiple" size="12">{{ S_FORUM_OPTIONS }}</select></dd>
+	</dl>
+	<dl>
+		<dt><label for="beyondbot_group_ids">{{ lang('ACP_BEYONDBOT_GROUPS') ~ lang('COLON') }}</label><br><span>{{ lang('ACP_BEYONDBOT_GROUPS_EXPLAIN') }}</span></dt>
+		<dd><select id="beyondbot_group_ids" name="beyondbot_group_ids[]" multiple="multiple" size="6">{{ S_GROUP_OPTIONS }}</select></dd>
+	</dl>
+	<dl>
+		<dt><label for="beyondbot_min_posts">{{ lang('ACP_BEYONDBOT_MIN_POSTS') ~ lang('COLON') }}</label><br><span>{{ lang('ACP_BEYONDBOT_MIN_POSTS_EXPLAIN') }}</span></dt>
+		<dd><input type="number" min="0" id="beyondbot_min_posts" name="beyondbot_min_posts" value="{{ BEYONDBOT_MIN_POSTS }}"></dd>
+	</dl>
+	<dl>
+		<dt><label for="beyondbot_blocked_topics">{{ lang('ACP_BEYONDBOT_BLOCKED_TOPICS') ~ lang('COLON') }}</label><br><span>{{ lang('ACP_BEYONDBOT_BLOCKED_TOPICS_EXPLAIN') }}</span></dt>
+		<dd><input type="text" class="inputbox" id="beyondbot_blocked_topics" name="beyondbot_blocked_topics" value="{{ BEYONDBOT_BLOCKED_TOPICS|e }}" size="50"></dd>
+	</dl>
+</fieldset>
+
+<fieldset>
+	<legend>{{ lang('ACP_BEYONDBOT_LIMITS') }}</legend>
+	<dl>
+		<dt><label for="beyondbot_user_daily">{{ lang('ACP_BEYONDBOT_USER_DAILY') ~ lang('COLON') }}</label><br><span>{{ lang('ACP_BEYONDBOT_USER_DAILY_EXPLAIN') }}</span></dt>
+		<dd><input type="number" min="0" id="beyondbot_user_daily" name="beyondbot_user_daily" value="{{ BEYONDBOT_USER_DAILY }}"></dd>
+	</dl>
+	<dl>
+		<dt><label for="beyondbot_topic_max">{{ lang('ACP_BEYONDBOT_TOPIC_MAX') ~ lang('COLON') }}</label></dt>
+		<dd><input type="number" min="0" id="beyondbot_topic_max" name="beyondbot_topic_max" value="{{ BEYONDBOT_TOPIC_MAX }}"></dd>
+	</dl>
+	<dl>
+		<dt><label for="beyondbot_board_daily">{{ lang('ACP_BEYONDBOT_BOARD_DAILY') ~ lang('COLON') }}</label></dt>
+		<dd><input type="number" min="0" id="beyondbot_board_daily" name="beyondbot_board_daily" value="{{ BEYONDBOT_BOARD_DAILY }}"></dd>
+	</dl>
+	<dl>
+		<dt><label for="beyondbot_month_cap">{{ lang('ACP_BEYONDBOT_MONTH_CAP') ~ lang('COLON') }}</label><br><span>{{ lang('ACP_BEYONDBOT_MONTH_CAP_EXPLAIN') }}</span></dt>
+		<dd><input type="number" min="0" step="0.01" id="beyondbot_month_cap" name="beyondbot_month_cap" value="{{ BEYONDBOT_MONTH_CAP|e }}"></dd>
+	</dl>
+</fieldset>
+
+<fieldset>
+	<legend>{{ lang('ACP_BEYONDBOT_MODEL_HEAD') }}</legend>
+	<dl>
+		<dt><label for="beyondbot_model">{{ lang('ACP_BEYONDBOT_MODEL') ~ lang('COLON') }}</label><br><span>{{ lang('ACP_BEYONDBOT_MODEL_EXPLAIN') }}</span></dt>
+		<dd><select id="beyondbot_model" name="beyondbot_model">{{ S_MODEL_OPTIONS }}</select></dd>
+	</dl>
+	<dl>
+		<dt><label for="beyondbot_custom_model">{{ lang('ACP_BEYONDBOT_CUSTOM_MODEL') ~ lang('COLON') }}</label><br><span>{{ lang('ACP_BEYONDBOT_CUSTOM_MODEL_EXPLAIN') }}</span></dt>
+		<dd><input type="text" class="inputbox" id="beyondbot_custom_model" name="beyondbot_custom_model" value="{{ BEYONDBOT_CUSTOM_MODEL|e }}" size="30"></dd>
+	</dl>
+	<dl>
+		<dt><label for="beyondbot_custom_price_in">{{ lang('ACP_BEYONDBOT_CUSTOM_PRICES') ~ lang('COLON') }}</label><br><span>{{ lang('ACP_BEYONDBOT_CUSTOM_PRICES_EXPLAIN') }}</span></dt>
+		<dd>$<input type="number" min="0" step="0.01" id="beyondbot_custom_price_in" name="beyondbot_custom_price_in" value="{{ BEYONDBOT_CUSTOM_PRICE_IN|e }}">
+			$<input type="number" min="0" step="0.01" name="beyondbot_custom_price_out" value="{{ BEYONDBOT_CUSTOM_PRICE_OUT|e }}"></dd>
+	</dl>
+	<dl>
+		<dt><label for="beyondbot_effort">{{ lang('ACP_BEYONDBOT_EFFORT') ~ lang('COLON') }}</label><br><span>{{ lang('ACP_BEYONDBOT_EFFORT_EXPLAIN') }}</span></dt>
+		<dd><select id="beyondbot_effort" name="beyondbot_effort">{{ S_EFFORT_OPTIONS }}</select></dd>
+	</dl>
+	<dl>
+		<dt><label for="beyondbot_max_tokens">{{ lang('ACP_BEYONDBOT_MAX_TOKENS') ~ lang('COLON') }}</label><br><span>{{ lang('ACP_BEYONDBOT_MAX_TOKENS_EXPLAIN') }}</span></dt>
+		<dd><input type="number" min="1024" max="64000" id="beyondbot_max_tokens" name="beyondbot_max_tokens" value="{{ BEYONDBOT_MAX_TOKENS }}"></dd>
+	</dl>
+	<dl>
+		<dt><label for="beyondbot_max_chars">{{ lang('ACP_BEYONDBOT_MAX_CHARS') ~ lang('COLON') }}</label></dt>
+		<dd><input type="number" min="500" max="60000" id="beyondbot_max_chars" name="beyondbot_max_chars" value="{{ BEYONDBOT_MAX_CHARS }}"></dd>
+	</dl>
+</fieldset>
+
+<fieldset>
+	<legend>{{ lang('ACP_BEYONDBOT_CONTENT') }}</legend>
+	<dl>
+		<dt><label for="beyondbot_domains">{{ lang('ACP_BEYONDBOT_DOMAINS') ~ lang('COLON') }}</label><br><span>{{ lang('ACP_BEYONDBOT_DOMAINS_EXPLAIN') }}</span></dt>
+		<dd><input type="text" class="inputbox" id="beyondbot_domains" name="beyondbot_domains" value="{{ BEYONDBOT_DOMAINS|e }}" size="60"></dd>
+	</dl>
+	<dl>
+		<dt><label for="beyondbot_extra">{{ lang('ACP_BEYONDBOT_EXTRA') ~ lang('COLON') }}</label><br><span>{{ lang('ACP_BEYONDBOT_EXTRA_EXPLAIN') }}</span></dt>
+		<dd><textarea id="beyondbot_extra" name="beyondbot_extra" rows="6" cols="60">{{ BEYONDBOT_EXTRA|e }}</textarea></dd>
+	</dl>
+	<dl>
+		<dt><label for="beyondbot_kb_url">{{ lang('ACP_BEYONDBOT_KB_URL') ~ lang('COLON') }}</label><br><span>{{ lang('ACP_BEYONDBOT_KB_URL_EXPLAIN') }}</span></dt>
+		<dd><input type="text" class="inputbox" id="beyondbot_kb_url" name="beyondbot_kb_url" value="{{ BEYONDBOT_KB_URL|e }}" size="80"></dd>
+	</dl>
+	<dl>
+		<dt><label for="beyondbot_api_base">{{ lang('ACP_BEYONDBOT_API_BASE') ~ lang('COLON') }}</label><br><span>{{ lang('ACP_BEYONDBOT_API_BASE_EXPLAIN') }}</span></dt>
+		<dd><input type="text" class="inputbox" id="beyondbot_api_base" name="beyondbot_api_base" value="{{ BEYONDBOT_API_BASE|e }}" size="50"></dd>
+	</dl>
+</fieldset>
+
+<fieldset class="submit-buttons">
+	<input class="button1" type="submit" id="submit" name="submit" value="{{ lang('SUBMIT') }}">&nbsp;
+	<input class="button2" type="reset" id="reset" name="reset" value="{{ lang('RESET') }}">
+	{{ S_FORM_TOKEN }}
+</fieldset>
+</form>
+
+{% include 'overall_footer.html' %}
