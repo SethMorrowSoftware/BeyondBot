@@ -175,8 +175,20 @@ class worker
 		$text = $filter->clean($r['text']);
 		if ($text === null)
 		{
-			$this->store->update_job($job_id, ['status' => store::SKIPPED, 'reason' => 'empty answer']);
-			$this->store->log($log + ['outcome' => 'empty', 'detail' => 'nothing to post after filtering (' . $r['stop_reason'] . ')']);
+			// The member asked and the calls were paid for: say so in the
+			// topic rather than leave them waiting for a reply that never
+			// comes. The note has no footer: it is not an answer.
+			try
+			{
+				$reply_id = $this->forum->post_reply($this->settings->bot_user_id(), $q,
+					$this->quote($q) . $this->language->lang('BEYONDBOT_NO_ANSWER'));
+			}
+			catch (\Throwable $e)
+			{
+				$reply_id = 0;
+			}
+			$this->store->update_job($job_id, ['status' => store::SKIPPED, 'reason' => 'empty answer', 'reply_post_id' => $reply_id]);
+			$this->store->log($log + ['outcome' => 'empty', 'reply_post_id' => $reply_id, 'detail' => self::ending($r) . '; nothing to post after filtering; ' . ($reply_id ? 'a short note was posted' : 'the note could not be posted')]);
 			return 'skipped';
 		}
 
@@ -192,8 +204,15 @@ class worker
 			return 'failed';
 		}
 		$this->store->update_job($job_id, ['status' => store::DONE, 'reason' => '', 'reply_post_id' => $reply_id]);
-		$this->store->log($log + ['outcome' => store::ANSWERED, 'reply_post_id' => $reply_id, 'detail' => (string) $r['stop_reason']]);
+		$this->store->log($log + ['outcome' => store::ANSWERED, 'reply_post_id' => $reply_id, 'detail' => self::ending($r)]);
 		return 'answered';
+	}
+
+	/** How the last call ended, for the log: "end_turn; thinking,text; 1520 chars", plus "after a retry". */
+	protected static function ending(array $r): string
+	{
+		return (string) ($r['stop_reason'] ?? '') . '; ' . ($r['blocks'] ?? '') . '; ' . mb_strlen((string) ($r['text'] ?? '')) . ' chars'
+			. (!empty($r['recovered']) ? '; after a retry' : '');
 	}
 
 	/**

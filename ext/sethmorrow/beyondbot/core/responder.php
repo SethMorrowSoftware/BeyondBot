@@ -21,6 +21,8 @@ class responder
 	public const MAX_ROUNDS = 4;
 	public const RESULT_CHARS = 2500;   // per search hit
 	public const CALL_CHARS = 14000;    // per tool result
+	public const MAX_RECOVERY_TOKENS = 32000;
+	public const ANSWER_NOW = 'You have used up the room for looking things up and thinking. Write your answer to the question now, from what you have already found. Keep it short; if something is still unsure, say so plainly.';
 
 	protected gateway $gateway;
 	protected knowledge $knowledge;
@@ -67,7 +69,7 @@ class responder
 	}
 
 	/**
-	 * @return array{text:string,stop_reason:?string,usage:array,model:string,queries:list<string>,rounds:int,calls:list<array>}
+	 * @return array{text:string,blocks:string,recovered:bool,stop_reason:?string,usage:array,model:string,queries:list<string>,rounds:int,calls:list<array>}
 	 */
 	public function answer(string $user_turn): array
 	{
@@ -126,8 +128,47 @@ class responder
 			$messages[] = ['role' => 'user', 'content' => $tool_results];
 		}
 
+		// Nothing to post, though Claude did not decline: it spent its
+		// whole budget on thinking and lookups (stop_reason "max_tokens"),
+		// as a hard question did on the live board. One more call, with no
+		// tools, less thinking and twice the room, asks for the answer
+		// from what it has found. The paid calls so far are kept either way.
+		$recovered = false;
+		if (trim($result['text'] ?? '') === '' && ($result['stop_reason'] ?? '') !== 'refusal')
+		{
+			$recovered = true;
+			$messages = self::with_nudge($messages, self::ANSWER_NOW);
+			try
+			{
+				$result = $this->gateway->create([
+					'model' => $this->options['model'],
+					'max_tokens' => min(self::MAX_RECOVERY_TOKENS, 2 * (int) $this->options['max_tokens']),
+					'effort' => 'low',
+					'system' => $this->options['system'],
+					'tools' => self::tools(),
+					'tool_choice' => 'none',
+					'messages' => $messages,
+				]);
+			}
+			catch (gateway_error $e)
+			{
+				$e->calls = $calls;
+				throw $e;
+			}
+			foreach ($usage as $k => $v)
+			{
+				$usage[$k] = $v + (int) ($result['usage'][$k] ?? 0);
+			}
+			$calls[] = ['model' => $result['model'], 'usage' => $result['usage']];
+			$model = $result['model'];
+		}
+
 		return [
 			'text' => trim($result['text'] ?? ''),
+			// What the last reply was made of ("thinking,text"), for the log:
+			// it tells an answer that never came from one the filter removed.
+			'blocks' => implode(',', array_map(static fn ($b) => (string) (is_array($b) ? ($b['type'] ?? '?') : ($b->type ?? '?')), (array) ($result['content'] ?? []))),
+			'recovered' => $recovered,
 			'stop_reason' => $result['stop_reason'] ?? null,
 			'usage' => $usage,
 			'model' => $model,
@@ -170,6 +211,22 @@ class responder
 			return [self::clip(self::format_hits($hits)), 'search: ' . $query . ' (' . count($hits) . ')'];
 		}
 		return ['Unknown tool "' . $name . '".', 'unknown tool: ' . $name];
+	}
+
+	/** The conversation with a short instruction added to its last (user) turn. */
+	protected static function with_nudge(array $messages, string $nudge): array
+	{
+		$i = count($messages) - 1;
+		$content = $messages[$i]['content'];
+		if (is_string($content))
+		{
+			$messages[$i]['content'] = $content . "\n\n" . $nudge;
+		}
+		else
+		{
+			$messages[$i]['content'][] = ['type' => 'text', 'text' => $nudge];
+		}
+		return $messages;
 	}
 
 	public static function format_hits(array $hits): string

@@ -135,4 +135,48 @@ final class ResponderTest extends TestCase
 		}
 		$this->assertSame(['get_dictionary_entry', 'search_docs'], array_column(responder::tools(), 'name'));
 	}
+
+	public function testAnAnswerCutOffByTheBudgetGetsOneMoreTryWithoutTools(): void
+	{
+		$g = new FakeGateway(fn ($r, $n) => match ($n) {
+			1 => self::reply('tool_use', [['id' => 't1', 'name' => 'search_docs', 'input' => ['query' => 'pdf']]]),
+			2 => self::reply('max_tokens'),
+			default => self::reply('end_turn', [], 'Short answer.'),
+		});
+		$a = (new responder($g, new FakeKnowledge(), ['model' => 'claude-sonnet-5-5', 'system' => 'SYS', 'max_tokens' => 8000]))->answer('Q');
+		$this->assertSame('Short answer.', $a['text']);
+		$this->assertSame(3, $a['rounds'], 'every paid call is counted, the recovery one too');
+		$this->assertTrue($a['recovered']);
+		$last = $g->requests[2];
+		$this->assertSame('none', $last['tool_choice']);
+		$this->assertSame('low', $last['effort']);
+		$this->assertSame(16000, $last['max_tokens']);
+		$turn = end($last['messages'])['content'];
+		$this->assertSame('tool_result', $turn[0]['type']);
+		$this->assertSame(responder::ANSWER_NOW, end($turn)['text']);
+	}
+
+	public function testTheRecoveryBudgetIsCapped(): void
+	{
+		$g = new FakeGateway(fn ($r, $n) => $n === 1 ? self::reply('max_tokens') : self::reply('end_turn', [], 'ok'));
+		(new responder($g, new FakeKnowledge(), ['model' => 'm', 'system' => 'S', 'max_tokens' => 30000]))->answer('Q');
+		$this->assertSame(responder::MAX_RECOVERY_TOKENS, $g->requests[1]['max_tokens']);
+		$this->assertStringEndsWith(responder::ANSWER_NOW, $g->requests[1]['messages'][0]['content']);
+	}
+
+	public function testARefusalIsNotRetried(): void
+	{
+		$g = new FakeGateway(fn ($r, $n) => self::reply('refusal'));
+		$a = $this->responder($g)->answer('Q');
+		$this->assertCount(1, $g->requests);
+		$this->assertSame('refusal', $a['stop_reason']);
+	}
+
+	public function testAnAnswerIsNeverAskedForTwice(): void
+	{
+		$g = new FakeGateway(fn ($r, $n) => self::reply('end_turn', [], 'Done.'));
+		$a = $this->responder($g)->answer('Q');
+		$this->assertCount(1, $g->requests);
+		$this->assertFalse($a['recovered']);
+	}
 }
