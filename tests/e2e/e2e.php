@@ -235,6 +235,25 @@ $config->set('beyondbot_enabled', 1);
 $config->set('beyondbot_user_daily', 2);
 $config->set('beyondbot_min_posts', 5);
 
+// The OXT stack tools extension's [dict] tag, as openxtalk.org has it
+// (oxt/stacktools migrations/v100_bbcodes.php), made the way the ACP does.
+if (!class_exists('acp_bbcodes'))
+{
+	include $phpbb_root_path . 'includes/acp/acp_bbcodes.' . $phpEx;
+}
+$dict_match = '[dict]{SIMPLETEXT}[/dict]';
+$dict_tpl = '<a class="oxt-dict" href="https://sethmorrowsoftware.github.io/OpenXTalk-Beyond/dictionary/#{SIMPLETEXT}" target="_blank" rel="noopener" title="Open in the OXT-Beyond Dictionary"><code>{SIMPLETEXT}</code></a>';
+$dict = (new acp_bbcodes())->build_regexp($dict_match, $dict_tpl);
+$dict_id = max(NUM_CORE_BBCODES + 1, (int) (one('SELECT MAX(bbcode_id) AS m FROM ' . BBCODES_TABLE)['m'] ?? 0) + 1);
+$db->sql_query('INSERT INTO ' . BBCODES_TABLE . ' ' . $db->sql_build_array('INSERT', [
+	'bbcode_id' => $dict_id, 'bbcode_tag' => 'dict', 'bbcode_match' => $dict_match, 'bbcode_tpl' => $dict_tpl,
+	'display_on_posting' => 1, 'bbcode_helpline' => '',
+	'first_pass_match' => $dict['first_pass_match'], 'first_pass_replace' => $dict['first_pass_replace'],
+	'second_pass_match' => $dict['second_pass_match'], 'second_pass_replace' => $dict['second_pass_replace'],
+]));
+$cache->destroy('sql', BBCODES_TABLE);
+$phpbb_container->get('text_formatter.cache')->invalidate();
+
 $alice = member('Alice Asker', 10);
 $newbie = member('New Member', 0);
 $carol = member('Carol Curious', 10);
@@ -297,6 +316,7 @@ check(($r0['body']['thinking']['type'] ?? '') === 'adaptive', 'adaptive thinking
 check(($r0['body']['output_config']['effort'] ?? '') === 'medium', 'medium effort');
 check(($r0['body']['system'][0]['cache_control']['type'] ?? '') === 'ephemeral', 'the system prompt is marked for caching');
 check(str_contains($r0['body']['system'][0]['text'] ?? '', 'You are Beyond Bot'), 'the system prompt is the primer');
+check(str_contains($r0['body']['system'][0]['text'] ?? '', '[dict]open file[/dict]'), "Claude is told about the board's [dict] tag");
 $tool_names = array_column($r0['body']['tools'] ?? [], 'name');
 check($tool_names === ['get_dictionary_entry', 'search_docs'], 'Claude gets exactly the two read-only tools', json_encode($tool_names));
 $turn = $r0['body']['messages'][0]['content'] ?? '';
@@ -335,6 +355,8 @@ check(!preg_match('/(?<![\w@])@Beyond Bot/', preg_replace('#\[quote.*?\[/quote\]
 check(str_contains($inj_src, '[code]put "[img]x[/img]" into field 1[/code]'), 'code blocks are left exactly as written');
 check(str_contains($inj_src, '[b]Sure.[/b]'), 'Markdown bold is turned into BBCode');
 check(str_contains($inj_src, 'Use [b]repeat for each line[/b] for speed.'), 'code inside a sentence becomes bold, not a code box', $inj_src);
+check(str_contains($inj_src, 'Read [dict]open file[/dict] and [b]the "x"[/b].'), "the board's [dict] tag is kept, and one it could not render becomes bold", $inj_src);
+check(str_contains((string) $inj[0]['post_text'], 'oxt-dict') || str_contains($utils->unparse($inj[0]['post_text']), '[dict]'), '[dict] is stored as the board tag', (string) ($inj[0]['post_text'] ?? ''));
 check(!str_contains($inj_src, '[quote'), 'a question that is still the last post is not quoted', $inj_src);
 check(!str_contains($inj_src, '[size=200]') && !str_contains($inj_src, '[color=red]'), 'BBCodes outside the short list are unwrapped');
 $queued_from_reply = $inj ? queued((int) $inj[0]['post_id']) : null;

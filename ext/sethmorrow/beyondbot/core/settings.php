@@ -76,11 +76,12 @@ class settings
 		return ($in > 0 && $out > 0) ? [$in, $out] : null;
 	}
 
-	public function system_prompt(): string
+	public function system_prompt(array $board_tags = []): string
 	{
 		return prompt::system(
 			(string) $this->config_text->get('beyondbot_primer'),
-			(string) $this->config_text->get('beyondbot_extra')
+			(string) $this->config_text->get('beyondbot_extra'),
+			$board_tags
 		);
 	}
 

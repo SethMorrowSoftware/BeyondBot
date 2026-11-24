@@ -33,9 +33,15 @@ class output_filter
 	protected array $domains;
 	protected int $max_chars;
 	protected string $bot_name;
+	/** @var string[] board BBCodes allowed besides ALLOWED_TAGS (only ones this filter knows how to check) */
+	protected array $board_tags;
 
-	public function __construct(array $domains = self::DEFAULT_DOMAINS, int $max_chars = 6000, string $bot_name = 'Beyond Bot')
+	/** Board tags the filter can check. [dict] takes phpBB's SIMPLETEXT only. */
+	public const BOARD_TAGS = ['dict'];
+
+	public function __construct(array $domains = self::DEFAULT_DOMAINS, int $max_chars = 6000, string $bot_name = 'Beyond Bot', array $board_tags = [])
 	{
+		$this->board_tags = array_values(array_intersect(self::BOARD_TAGS, array_map('strtolower', $board_tags)));
 		$this->domains = array_values(array_filter(array_map(
 			static fn ($d) => strtolower(trim((string) $d)), $domains)));
 		$this->max_chars = max(200, $max_chars);
@@ -72,6 +78,7 @@ class output_filter
 				$part = $this->filter_urls($part);
 			}
 			while ($part !== $before);
+			$part = $this->check_dict($part);
 			$part = $this->defuse_self_mention($part);
 			$parts[$i] = $part;
 		}
@@ -168,13 +175,43 @@ class output_filter
 	{
 		return preg_replace_callback('#\[(/?)([a-z*][a-z0-9_*]*)(=[^\]]*)?\]#i', function ($m) {
 			$name = strtolower($m[2]);
-			if (in_array($name, self::ALLOWED_TAGS, true))
+			if (in_array($name, self::ALLOWED_TAGS, true) || in_array($name, $this->board_tags, true))
 			{
 				return $m[0];
 			}
 			// [img]x[/img], [attachment=0]..: drop the markup, keep the words.
 			return '';
 		}, $text) ?? $text;
+	}
+
+	/**
+	 * [dict]word[/dict] renders only when the word is phpBB SIMPLETEXT
+	 * (letters, digits, spaces and - + . , _); anything else would show the
+	 * raw tag, so it becomes bold. A [dict] left unclosed or empty is dropped.
+	 */
+	protected function check_dict(string $text): string
+	{
+		if (!in_array('dict', $this->board_tags, true))
+		{
+			return $text;
+		}
+		$kept = [];
+		$text = preg_replace_callback('#\[dict\]([^\[\]]*?)\[/dict\]#i', static function ($m) use (&$kept) {
+			$word = trim($m[1]);
+			if ($word === '')
+			{
+				return '';
+			}
+			if (!preg_match('/^[A-Za-z0-9 \-+.,_]+$/', $word))
+			{
+				return '[b]' . $word . '[/b]';
+			}
+			$kept[] = '[dict]' . $word . '[/dict]';
+			return "\x01" . (count($kept) - 1) . "\x01";
+		}, $text) ?? $text;
+		// Strays with no partner, or wrapped around other tags, are dropped.
+		$text = preg_replace('#\[/?dict\]#i', '', $text) ?? $text;
+		return preg_replace_callback('/\x01(\d+)\x01/', static fn ($m) => $kept[(int) $m[1]], $text) ?? $text;
 	}
 
 	/** "@Beyond Bot" in the bot's own reply would be a mention; drop the @. */
