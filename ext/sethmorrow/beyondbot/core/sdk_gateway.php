@@ -30,6 +30,10 @@ use Anthropic\Core\Exceptions\RequestTimeoutException;
  *  - the system prompt marked for prompt caching (tools and system are
  *    the same on every call, so they are read from cache at a tenth of
  *    the price while questions keep coming);
+ *  - the conversation marked for caching too (top-level cacheControl puts
+ *    the marker on its last block): an answer that looks things up sends
+ *    the whole conversation again on every round, and without this each
+ *    round paid full price for every earlier search result again;
  *  - server-side refusal fallbacks ("default"): if the chosen model
  *    declines on policy grounds, the server retries on its default
  *    substitute rather than leaving the member with nothing.
@@ -64,6 +68,7 @@ class sdk_gateway implements gateway
 				outputConfig: ['effort' => $request['effort']],
 				tools: $request['tools'],
 				toolChoice: ['type' => $request['tool_choice'] === 'none' ? 'none' : 'auto'],
+				cacheControl: ['type' => 'ephemeral'],
 				fallbacks: 'default',
 				betas: [self::FALLBACK_BETA],
 			);

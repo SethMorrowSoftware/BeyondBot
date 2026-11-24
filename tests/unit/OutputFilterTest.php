@@ -159,4 +159,39 @@ final class OutputFilterTest extends TestCase
 		// inside code it is code
 		$this->assertStringContainsString("[code]\nput [dict]x[/dict]\n[/code]", $f->clean("See:\n[code]\nput [dict]x[/dict]\n[/code]"));
 	}
+
+	public function testArrayKeysInProseAreKeptAndCannotFormat(): void
+	{
+		$z = output_filter::DEFUSE;
+		$out = $this->f()->clean("Inside the loop, tArray[each] is that key's value.\n\nRead tData[i] and tArr[b] here. A lone [/u] too.");
+		$this->assertStringContainsString('tArray[' . $z . 'each]', $out);
+		$this->assertStringContainsString('tData[' . $z . 'i]', $out);
+		$this->assertStringContainsString('tArr[' . $z . 'b]', $out);
+		$this->assertStringContainsString('[' . $z . '/u]', $out);
+		// Nothing left that phpBB would read as an open tag.
+		$this->assertDoesNotMatchRegularExpression('#\[(b|i|u)\]#', $out);
+		// What a reader sees is the text as written.
+		$this->assertSame("Inside the loop, tArray[each] is that key's value.\n\nRead tData[i] and tArr[b] here. A lone [/u] too.", str_replace($z, '', $out));
+	}
+
+	public function testPairedTagsAndListsStay(): void
+	{
+		$in = "Use [b]put[/b] and [i]get[/i].\n[list]\n[*]one\n[*]two with tList[*] inside\n[/list]\nA stray [*] here.";
+		$out = $this->f()->clean($in);
+		$this->assertStringContainsString('[b]put[/b] and [i]get[/i]', $out);
+		$this->assertStringContainsString("[list]\n[*]one\n[*]two", $out);
+		$this->assertStringContainsString('A stray [' . output_filter::DEFUSE . '*] here.', $out);
+	}
+
+	public function testAQuoteAroundCodeStaysPaired(): void
+	{
+		$in = "[quote]Try this:\n[code]put tA[i] into x[/code]\n[/quote]\nDone.";
+		$this->assertSame($in, $this->f()->clean($in));
+	}
+
+	public function testUnknownTagsAreDefusedNotDropped(): void
+	{
+		$out = $this->f()->clean('Set tOpts[timeout] and [spoiler]x[/spoiler].');
+		$this->assertSame('Set tOpts[' . output_filter::DEFUSE . 'timeout] and x.', $out);
+	}
 }

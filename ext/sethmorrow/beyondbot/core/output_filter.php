@@ -23,6 +23,25 @@ class output_filter
 	/** BBCodes the bot may use. Everything else is unwrapped to its text. */
 	public const ALLOWED_TAGS = ['b', 'i', 'u', 'code', 'quote', 'list', '*', 'url'];
 
+	/**
+	 * Tags phpBB boards commonly know that the bot may not use: these are
+	 * removed and their words kept. Any OTHER [word] is not markup at all
+	 * but prose ("tArray[each]"), so it is kept and only defused.
+	 */
+	public const DROP_TAGS = [
+		'img', 'color', 'size', 'email', 'flash', 'attachment', 'dict',
+		's', 'strike', 'sup', 'sub', 'spoiler', 'youtube', 'video', 'media',
+		'center', 'left', 'right', 'align', 'font', 'hr', 'table', 'tr', 'td', 'th',
+		'mention', 'highlight', 'glow', 'shadow', 'offtopic', 'iframe',
+	];
+
+	/**
+	 * Put after a [ that must not open a tag. phpBB has no escape for
+	 * BBCode, but a zero-width space between [ and the name looks the same
+	 * and parses as plain text.
+	 */
+	public const DEFUSE = "\u{200B}";
+
 	public const DEFAULT_DOMAINS = [
 		'openxtalk.org',
 		'github.com',
@@ -83,6 +102,7 @@ class output_filter
 			$parts[$i] = $part;
 		}
 		$text = trim(implode('', $parts));
+		$text = $this->balance_tags($text);
 		$text = preg_replace("/\n{3,}/", "\n\n", $text) ?? $text;
 		$text = $this->limit_length($text);
 
@@ -179,9 +199,93 @@ class output_filter
 			{
 				return $m[0];
 			}
-			// [img]x[/img], [attachment=0]..: drop the markup, keep the words.
-			return '';
+			if (in_array($name, self::DROP_TAGS, true))
+			{
+				// [img]x[/img], [attachment=0]..: drop the markup, keep the words.
+				return '';
+			}
+			// Not a tag the filter knows: prose such as an array key
+			// ("tArray[each]"). Keep it, but so that a board BBCode of that
+			// name cannot parse it.
+			return '[' . self::DEFUSE . substr($m[0], 1);
 		}, $text) ?? $text;
+	}
+
+	/**
+	 * An allowed tag with no partner is prose, not markup: "tData[i]" or
+	 * "tArr[b]" would turn the rest of the post italic or bold, and a lone
+	 * [/b] shows as text anyway. Defuse every [b], [i], [u], [quote],
+	 * [list], [url] and [code] that has no partner, and every [*] outside
+	 * a list. [code] blocks are masked first: their text is shown as
+	 * written, and a [quote] may hold one.
+	 */
+	protected function balance_tags(string $text): string
+	{
+		$blocks = [];
+		$masked = preg_replace_callback('#\[code(?:=[^\]]*)?\].*?\[/code\]#is', static function ($m) use (&$blocks) {
+			$blocks[] = $m[0];
+			return "\x02" . (count($blocks) - 1) . "\x02";
+		}, $text) ?? $text;
+
+		preg_match_all('#\[(/?)(b|i|u|code|quote|list|url|\*)(?:=[^\]]*)?\]#i', $masked, $found, PREG_SET_ORDER | PREG_OFFSET_CAPTURE);
+		$open = [];
+		$bad = [];
+		$lists = [];
+		foreach ($found as $k => $m)
+		{
+			$name = strtolower($m[2][0]);
+			if ($name === '*')
+			{
+				continue;
+			}
+			if ($m[1][0] === '')
+			{
+				$open[$name][] = $k;
+			}
+			elseif (!empty($open[$name]))
+			{
+				$start = array_pop($open[$name]);
+				if ($name === 'list')
+				{
+					$lists[] = [$found[$start][0][1], $m[0][1]];
+				}
+			}
+			else
+			{
+				$bad[$k] = true;
+			}
+		}
+		foreach ($open as $left)
+		{
+			foreach ($left as $k)
+			{
+				$bad[$k] = true;
+			}
+		}
+		foreach ($found as $k => $m)
+		{
+			if ($m[2][0] !== '*')
+			{
+				continue;
+			}
+			$at = $m[0][1];
+			$inside = false;
+			foreach ($lists as [$from, $to])
+			{
+				$inside = $inside || ($at > $from && $at < $to);
+			}
+			if (!$inside)
+			{
+				$bad[$k] = true;
+			}
+		}
+		// Last first, so the earlier offsets stay right.
+		krsort($bad);
+		foreach (array_keys($bad) as $k)
+		{
+			$masked = substr_replace($masked, '[' . self::DEFUSE, $found[$k][0][1], 1);
+		}
+		return preg_replace_callback('/\x02(\d+)\x02/', static fn ($m) => $blocks[(int) $m[1]], $masked) ?? $masked;
 	}
 
 	/**

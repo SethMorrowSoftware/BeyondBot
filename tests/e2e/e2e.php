@@ -316,6 +316,7 @@ check(($r0['body']['thinking']['type'] ?? '') === 'adaptive', 'adaptive thinking
 check(($r0['body']['output_config']['effort'] ?? '') === 'medium', 'medium effort');
 check(($r0['body']['system'][0]['cache_control']['type'] ?? '') === 'ephemeral', 'the system prompt is marked for caching');
 check(str_contains($r0['body']['system'][0]['text'] ?? '', 'You are Beyond Bot'), 'the system prompt is the primer');
+check(($r0['body']['cache_control']['type'] ?? '') === 'ephemeral', 'the conversation is marked for caching (each lookup round reads the earlier ones from cache)');
 check(str_contains($r0['body']['system'][0]['text'] ?? '', '[dict]open file[/dict]'), "Claude is told about the board's [dict] tag");
 $tool_names = array_column($r0['body']['tools'] ?? [], 'name');
 check($tool_names === ['get_dictionary_entry', 'search_docs'], 'Claude gets exactly the two read-only tools', json_encode($tool_names));
