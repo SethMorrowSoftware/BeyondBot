@@ -413,6 +413,29 @@ check($lf2 !== false && (int) $lf2['cost_micro'] === 1500 * 2 + 80 * 10 + (int) 
 check($lf2 && (int) $lf2['input_tokens'] === 1500 && (int) $lf2['cache_write_tokens'] === 2500, 'and with its tokens');
 $db->sql_query('DELETE FROM ' . $prefix . 'beyondbot_queue WHERE post_id = ' . $pf['post_id']);
 
+// The budget runs out on thinking (seen on the live board): one more call, no tools.
+$dana = member('Dana Deep', 10);
+$pe = post_as($dana, $forum_id, null, '@Beyond Bot MARKER_EMPTY', 'Out of room');
+run_queue();
+$pe_posts = bot_posts($pe['topic_id']);
+check($pe_posts && str_contains($utils->unparse($pe_posts[0]['post_text']), 'Recovered answer: use [b]revShell[/b].'), 'an answer cut off by its budget is asked for once more and posted');
+$pe_req = array_values(array_filter(fake_requests(), fn ($r) => str_contains(json_encode($r['body']['messages'][0] ?? ''), 'Out of room') || str_contains(json_encode($r['body']['messages'][0] ?? ''), 'MARKER_EMPTY')));
+$pe_last = end($pe_req)['body'] ?? [];
+check(($pe_last['tool_choice']['type'] ?? '') === 'none' && ($pe_last['output_config']['effort'] ?? '') === 'low', 'the last try has no tools and less thinking', json_encode($pe_last['tool_choice'] ?? null));
+$pe_log = one('SELECT * FROM ' . $prefix . "beyondbot_log WHERE post_id = " . $pe['post_id']);
+check($pe_log && (int) $pe_log['output_tokens'] >= 8000, 'both calls are paid for and logged', $pe_log ? $pe_log['output_tokens'] : 'no log');
+check($pe_log && str_contains($pe_log['detail'], 'end_turn; text;') && str_contains($pe_log['detail'], 'after a retry'), 'the log says how the answer ended and that it took a retry', $pe_log ? $pe_log['detail'] : '');
+
+$pe2 = post_as($dana, $forum_id, null, '@Beyond Bot MARKER_EMPTY_TWICE', 'Still out of room');
+run_queue();
+$pe2_posts = bot_posts($pe2['topic_id']);
+$pe2_src = $pe2_posts ? $utils->unparse($pe2_posts[0]['post_text']) : '';
+check(str_contains($pe2_src, 'could not finish an answer'), 'when there is still nothing to post, a short note says so instead of silence', $pe2_src);
+check(!str_contains($pe2_src, 'Answer written by AI'), 'the note is not dressed as an answer');
+check((queued($pe2['post_id'])['status'] ?? '') === 'skipped', 'the question is closed');
+$pe2_log = one('SELECT * FROM ' . $prefix . "beyondbot_log WHERE post_id = " . $pe2['post_id']);
+check($pe2_log && $pe2_log['outcome'] === 'empty' && str_contains($pe2_log['detail'], 'max_tokens; thinking; 0 chars') && (int) $pe2_log['reply_post_id'] > 0, 'an empty ending is logged with what the reply was made of', $pe2_log ? $pe2_log['detail'] : '');
+
 $pa = post_as($carol, $forum_id, null, '@Beyond Bot MARKER_AUTH', 'Auth test');
 run_queue();
 $ja = queued($pa['post_id']);

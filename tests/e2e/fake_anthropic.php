@@ -71,6 +71,16 @@ if (str_contains($first, 'MARKER_RETRY'))
 	header('x-should-retry: false');
 	error_reply(529, 'overloaded_error', 'Overloaded');
 }
+// The budget runs out before any text: the bot asks once more, with no tools.
+$asked_to_answer_now = str_contains(json_encode($last), 'Write your answer to the question now');
+if (str_contains($first, 'MARKER_EMPTY'))
+{
+	if ($asked_to_answer_now && ($req['tool_choice']['type'] ?? '') === 'none' && !str_contains($first, 'MARKER_EMPTY_TWICE'))
+	{
+		reply([['type' => 'text', 'text' => 'Recovered answer: use [b]revShell[/b].']], 'end_turn', $model);
+	}
+	reply([['type' => 'thinking', 'thinking' => '...', 'signature' => 'sig_long']], 'max_tokens', $model, ['output_tokens' => 8000]);
+}
 if (str_contains($first, 'MARKER_REFUSE'))
 {
 	reply([], 'refusal', $model);
