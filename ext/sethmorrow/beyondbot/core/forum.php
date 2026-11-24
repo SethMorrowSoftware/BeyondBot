@@ -130,6 +130,18 @@ class forum
 		return $out;
 	}
 
+	/** Whether any visible post came after this one in its topic. */
+	public function has_later_posts(int $topic_id, int $post_id): bool
+	{
+		$result = $this->db->sql_query_limit('SELECT post_id FROM ' . POSTS_TABLE . '
+			WHERE topic_id = ' . $topic_id . '
+				AND post_visibility = ' . ITEM_APPROVED . '
+				AND post_id > ' . $post_id, 1);
+		$row = $this->db->sql_fetchrow($result);
+		$this->db->sql_freeresult($result);
+		return (bool) $row;
+	}
+
 	/** A stored post back to the BBCode its author typed. */
 	public function source_text(string $stored, string $uid = ''): string
 	{

@@ -334,6 +334,8 @@ check(str_contains($inj_src, '[url=https://github.com/SethMorrowSoftware/OpenXTa
 check(!preg_match('/(?<![\w@])@Beyond Bot/', preg_replace('#\[quote.*?\[/quote\]#s', '', $inj_src)), 'the reply cannot mention the bot (no loops)');
 check(str_contains($inj_src, '[code]put "[img]x[/img]" into field 1[/code]'), 'code blocks are left exactly as written');
 check(str_contains($inj_src, '[b]Sure.[/b]'), 'Markdown bold is turned into BBCode');
+check(str_contains($inj_src, 'Use [b]repeat for each line[/b] for speed.'), 'code inside a sentence becomes bold, not a code box', $inj_src);
+check(!str_contains($inj_src, '[quote'), 'a question that is still the last post is not quoted', $inj_src);
 check(!str_contains($inj_src, '[size=200]') && !str_contains($inj_src, '[color=red]'), 'BBCodes outside the short list are unwrapped');
 $queued_from_reply = $inj ? queued((int) $inj[0]['post_id']) : null;
 check($queued_from_reply === null, "the bot's own reply is never queued");
