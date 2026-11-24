@@ -1,0 +1,42 @@
+# Builds the release zip forum admins upload, from main, and publishes
+# it on a GitHub release named after the extension's version
+# (ext/sethmorrow/beyondbot/composer.json). Run by hand after a version
+# bump; a version that already has a release is refused, never replaced.
+# Safe: runs only this repository's code; its only right is writing
+# this repository's releases.
+name: release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Tests
+        run: |
+          python3 -m unittest discover -s tools/tests
+          composer install --no-interaction --no-progress
+          vendor/bin/phpunit
+      - name: Build the zip
+        run: tools/package.sh "$RUNNER_TEMP/dist"
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version=$(python3 -c 'import json; print(json.load(open("ext/sethmorrow/beyondbot/composer.json"))["version"])')
+          tag="v$version"
+          if gh release view "$tag" > /dev/null 2>&1; then
+            echo "::error::$tag is already released; bump the version first."
+            exit 1
+          fi
+          gh release create "$tag" "$RUNNER_TEMP"/dist/* --target "$GITHUB_SHA" --title "Beyond Bot $version" \
+            --notes "Unzip in the board's root folder, so it lands in ext/sethmorrow/beyondbot/, then enable Beyond Bot in the ACP. See the README for setup. The .sha256 file lets you check the download."
