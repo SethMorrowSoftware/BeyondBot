@@ -90,6 +90,12 @@ class store
 		return $n;
 	}
 
+	/** Make every waiting question due now (after the admin fixed what paused the bot). */
+	public function wake_waiting(): void
+	{
+		$this->db->sql_query('UPDATE ' . $this->queue_table . " SET next_try = 0 WHERE status = '" . self::PENDING . "'");
+	}
+
 	public function update_job(int $job_id, array $fields): void
 	{
 		$this->db->sql_query('UPDATE ' . $this->queue_table . ' SET ' . $this->db->sql_build_array('UPDATE', $fields) . ' WHERE job_id = ' . $job_id);

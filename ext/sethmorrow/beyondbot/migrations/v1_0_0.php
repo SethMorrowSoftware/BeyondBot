@@ -21,7 +21,7 @@ class v1_0_0 extends \phpbb\db\migration\migration
 
 	public static function depends_on()
 	{
-		return ['\phpbb\db\migration\data\v330\v330'];
+		return ['\phpbb\db\migration\data\v330\v330', '\sethmorrow\beyondbot\migrations\v1_0_0_name_check'];
 	}
 
 	public function effectively_installed()
@@ -196,21 +196,24 @@ class v1_0_0 extends \phpbb\db\migration\migration
 	}
 
 	/**
-	 * Create (or adopt) the Beyond Bot member: a normal member in Registered
-	 * users, with no password (nobody can log in as it) and no e-mail, and
-	 * a special rank "AI helper" so every post says what it is.
+	 * Create the Beyond Bot member: a normal member in Registered users,
+	 * with no password (nobody can log in as it) and no e-mail, and a
+	 * special rank "AI helper" so every post says what it is.
+	 *
+	 * A member already named Beyond Bot is adopted ONLY if it is this
+	 * extension's own bot left from an earlier install (the purge keeps
+	 * the member so its posts keep their author): no password, no e-mail,
+	 * not a founder. Anyone else's account of that name is never trusted
+	 * by its name: the install stops and says so, because its owner could
+	 * log in as the bot and edit its answers.
 	 */
 	public function create_bot_user()
 	{
 		$registered = $this->registered_group();
 		$this->config->set('beyondbot_group_ids', (string) $registered);
 
-		$name = 'Beyond Bot';
-		$clean = utf8_clean_string($name);
-		$sql = 'SELECT user_id FROM ' . $this->table_prefix . "users WHERE username_clean = '" . $this->db->sql_escape($clean) . "'";
-		$result = $this->db->sql_query($sql);
-		$user_id = (int) $this->db->sql_fetchfield('user_id');
-		$this->db->sql_freeresult($result);
+		$name = v1_0_0_name_check::NAME;
+		$user_id = v1_0_0_name_check::refuse_if_taken($this->db, $this->table_prefix);
 
 		// The rank, reused if an admin already made one of this name.
 		$rank_title = 'AI helper';

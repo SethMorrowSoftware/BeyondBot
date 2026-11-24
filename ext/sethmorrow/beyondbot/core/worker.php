@@ -159,24 +159,10 @@ class worker
 		}
 		catch (gateway_error $e)
 		{
-			return $this->failed_call($job, $base_log, $e);
+			return $this->failed_call($job, $base_log + $this->usage_log($e->calls, $started), $e);
 		}
 
-		$cost = 0;
-		foreach ($r['calls'] as $call)
-		{
-			$cost += pricing::cost_micro($call['model'], $call['usage'], $this->settings->custom_prices());
-		}
-		$log = $base_log + [
-			'model' => $r['model'],
-			'input_tokens' => $r['usage']['input'],
-			'output_tokens' => $r['usage']['output'],
-			'cache_write_tokens' => $r['usage']['cache_write'],
-			'cache_read_tokens' => $r['usage']['cache_read'],
-			'cost_micro' => $cost,
-			'duration_ms' => (int) round((microtime(true) - $started) * 1000),
-			'queries' => json_encode($r['queries']),
-		];
+		$log = $base_log + $this->usage_log($r['calls'], $started) + ['queries' => json_encode($r['queries'])];
 
 		if ($r['stop_reason'] === 'refusal')
 		{
@@ -209,14 +195,43 @@ class worker
 		return 'answered';
 	}
 
-	protected function failed_call(array $job, array $base_log, gateway_error $e): string
+	/**
+	 * Tokens and cost of a list of calls (responder's {model, usage}),
+	 * each priced on the model that answered it.
+	 */
+	protected function usage_log(array $calls, float $started): array
+	{
+		$row = ['model' => '', 'input_tokens' => 0, 'output_tokens' => 0, 'cache_write_tokens' => 0, 'cache_read_tokens' => 0, 'cost_micro' => 0];
+		foreach ($calls as $call)
+		{
+			$row['model'] = (string) $call['model'];
+			$row['input_tokens'] += (int) ($call['usage']['input'] ?? 0);
+			$row['output_tokens'] += (int) ($call['usage']['output'] ?? 0);
+			$row['cache_write_tokens'] += (int) ($call['usage']['cache_write'] ?? 0);
+			$row['cache_read_tokens'] += (int) ($call['usage']['cache_read'] ?? 0);
+			$row['cost_micro'] += pricing::cost_micro($call['model'], $call['usage'], $this->settings->custom_prices());
+		}
+		$row['duration_ms'] = (int) round((microtime(true) - $started) * 1000);
+		return $row;
+	}
+
+	/**
+	 * $log carries the tokens and cost of the calls that succeeded before
+	 * the failure: they are paid for, so every path logs them and the
+	 * monthly cap counts them, even when the question will be tried again.
+	 */
+	protected function failed_call(array $job, array $log, gateway_error $e): string
 	{
 		$job_id = (int) $job['job_id'];
 		$now = $this->now();
+		$detail = mb_substr($e->getMessage(), 0, 255);
 		if ($e->kind === gateway_error::AUTH)
 		{
-			// Every job would fail the same way: stop, keep the queue, tell the admin once.
+			// Every job would fail the same way: stop, keep the queue, tell
+			// the admin once. The stored error holds the bot (limits and the
+			// cron task check it) until the admin clears it or saves a new key.
 			$this->store->update_job($job_id, ['next_try' => $now + 3600, 'reason' => 'API key or model refused']);
+			$this->store->log($log + ['outcome' => 'paused', 'detail' => $detail]);
 			if ((string) $this->settings->get('last_error') !== $e->getMessage())
 			{
 				$this->settings->set_error($e->getMessage());
@@ -227,11 +242,12 @@ class worker
 		$attempts = (int) $job['attempts'] + 1;
 		if ($e->kind === gateway_error::RETRY && $attempts < self::MAX_ATTEMPTS)
 		{
-			$this->store->update_job($job_id, ['attempts' => $attempts, 'next_try' => $now + 60 * (2 ** $attempts), 'reason' => mb_substr($e->getMessage(), 0, 255)]);
+			$this->store->update_job($job_id, ['attempts' => $attempts, 'next_try' => $now + 60 * (2 ** $attempts), 'reason' => $detail]);
+			$this->store->log($log + ['outcome' => 'retry', 'detail' => $detail]);
 			return 'retry';
 		}
-		$this->store->update_job($job_id, ['attempts' => $attempts, 'status' => store::FAILED, 'reason' => mb_substr($e->getMessage(), 0, 255)]);
-		$this->store->log($base_log + ['outcome' => 'failed', 'detail' => $e->getMessage()]);
+		$this->store->update_job($job_id, ['attempts' => $attempts, 'status' => store::FAILED, 'reason' => $detail]);
+		$this->store->log($log + ['outcome' => 'failed', 'detail' => $e->getMessage()]);
 		return 'failed';
 	}
 

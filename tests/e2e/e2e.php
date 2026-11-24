@@ -368,6 +368,15 @@ run_queue();
 check((queued($pt['post_id'])['status'] ?? '') === 'failed', 'after three failed tries the question is given up');
 check(bot_posts($pt['topic_id']) === [], 'a failure posts nothing in the topic');
 
+// A lookup round that succeeded is paid for even when the next call fails.
+$pf = post_as($carol, $forum_id, null, '@Beyond Bot MARKER_FAIL2', 'Paid then failed');
+run_queue();
+$lf2 = one('SELECT * FROM ' . $prefix . "beyondbot_log WHERE post_id = " . $pf['post_id'] . " AND outcome = 'retry'");
+check($lf2 !== false && (int) $lf2['cost_micro'] === 1500 * 2 + 80 * 10 + (int) (2500 * 2.5),
+	'a call paid for before a failure is logged with its cost', $lf2 ? $lf2['cost_micro'] : 'no retry row');
+check($lf2 && (int) $lf2['input_tokens'] === 1500 && (int) $lf2['cache_write_tokens'] === 2500, 'and with its tokens');
+$db->sql_query('DELETE FROM ' . $prefix . 'beyondbot_queue WHERE post_id = ' . $pf['post_id']);
+
 $pa = post_as($carol, $forum_id, null, '@Beyond Bot MARKER_AUTH', 'Auth test');
 run_queue();
 $ja = queued($pa['post_id']);
@@ -375,6 +384,27 @@ check($ja['status'] === 'pending', 'a refused key keeps the question waiting');
 check(str_contains((string) $config['beyondbot_last_error'], 'API key was refused'), 'a refused key is shown to the admin', (string) $config['beyondbot_last_error']);
 $crit = one('SELECT log_operation FROM ' . LOG_TABLE . " WHERE log_operation = 'LOG_BEYONDBOT_API_ERROR'");
 check($crit !== false, 'a refused key is written to the critical error log');
+check(one('SELECT log_id FROM ' . $prefix . "beyondbot_log WHERE outcome = 'paused' AND post_id = " . $pa['post_id']) !== false, 'the pause is in the answer log');
+
+// The pause holds across cron runs until the admin acts.
+$dave = member('Dave Waiting');
+$pw = post_as($dave, $forum_id, null, '@Beyond Bot asked while paused', 'Paused test');
+$before = count(fake_requests());
+run_queue();
+run_queue();
+check(count(fake_requests()) === $before, 'while paused, later cron runs send nothing to Claude');
+check((queued($pw['post_id'])['status'] ?? '') === 'pending', 'questions asked while paused wait');
+$lim = $phpbb_container->get('sethmorrow.beyondbot.settings')->for_limits();
+$verdict = sethmorrow\beyondbot\core\limits::decide($lim,
+	['forum_id' => $forum_id, 'topic_id' => 1, 'asker_posts' => 99, 'visibility' => 'approved', 'age_seconds' => 1, 'asker_group_ids' => $lim['group_ids']], []);
+check($verdict === ['wait', 'paused after an API error'], 'the limits say why', json_encode($verdict));
+
+// Clearing the error (what the admin panel's button does) wakes them.
+$db->sql_query('DELETE FROM ' . $prefix . 'beyondbot_queue WHERE post_id = ' . $pa['post_id']);
+$config->set('beyondbot_last_error', '');
+$phpbb_container->get('sethmorrow.beyondbot.store')->wake_waiting();
+run_queue();
+check((queued($pw['post_id'])['status'] ?? '') === 'done', 'once the error is cleared, waiting questions are answered');
 
 // ------------------------------------------------------------------ spend cap and kill switch
 $config->set('beyondbot_month_cap', '0');

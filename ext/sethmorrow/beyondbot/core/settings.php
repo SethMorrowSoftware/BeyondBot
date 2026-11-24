@@ -106,6 +106,7 @@ class settings
 		return [
 			'enabled' => $this->enabled(),
 			'has_key' => $this->api_key() !== '',
+			'api_error' => (string) $this->config['beyondbot_last_error'] !== '',
 			'has_knowledge' => (int) $this->config['beyondbot_kb_chunks'] > 0
 				&& trim((string) $this->config_text->get('beyondbot_primer')) !== '',
 			'forum_ids' => $this->forum_ids(),

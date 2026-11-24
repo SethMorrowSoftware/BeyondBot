@@ -44,6 +44,24 @@ final class OutputFilterTest extends TestCase
 		$this->assertSame('click and https://evil.example/2 and [url=https://github.com/x]ok[/url]', $out);
 	}
 
+	public static function smuggledLinks(): array
+	{
+		return [
+			'tag split by a removed tag' => ['[ur[color]l=https://evil.example/phishing]click[/ur[color]l]'],
+			'split with an image tag'    => ['[ur[img][/img]l=https://evil.example/p]x[/ur[img][/img]l]'],
+			'joined by a dropped link'   => ['[ur[url=https://evil.example/a]l=https://evil.example/b]click[/u[/url]rl]'],
+			'bare form'                  => ['[ur[size=1]l]https://evil.example/c[/ur[size=1]l]'],
+			'nested twice'               => ['[u[i[color]]rl=https://evil.example/d]x[/url]'],
+		];
+	}
+
+	/** @dataProvider smuggledLinks */
+	public function testNoLinkToAnotherSiteCanBeSmuggledIn(string $text): void
+	{
+		$out = (string) $this->f()->clean($text);
+		$this->assertDoesNotMatchRegularExpression('#\[url[=\]]\s*[\'"]?https?://evil#i', $out, $out);
+	}
+
 	public function testMarkdownBecomesBBCode(): void
 	{
 		$out = $this->f()->clean("## Heading\n\n**bold** and [the docs](https://github.com/a)\n\n```xtalk\nput **x** into y\n```");

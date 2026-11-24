@@ -88,3 +88,54 @@ done
 
 echo "== running"
 php "$here/e2e.php" "$work/board" "$work/kb" "http://127.0.0.1:$port" "$work/fake.jsonl"
+
+echo "== re-installing: the bot member from the first install is reused"
+cli="php $work/board/bin/phpbbcli.php"
+before=$(php "$here/bot_account.php" "$work/board")
+$cli extension:disable sethmorrow/beyondbot >/dev/null
+$cli extension:purge sethmorrow/beyondbot >/dev/null
+$cli extension:enable sethmorrow/beyondbot >/dev/null
+after=$(php "$here/bot_account.php" "$work/board")
+python3 - "$before" "$after" <<'PY'
+import json, sys
+b, a = json.loads(sys.argv[1]), json.loads(sys.argv[2])
+ok = len(a["ids"]) == 1 and a["ids"] == b["ids"] and a["config_user_id"] == b["ids"][0] and a["enabled"]
+print(("PASS" if ok else "FAIL") + "  a purge and re-install reuses the same bot member", "" if ok else (b, a))
+sys.exit(0 if ok else 1)
+PY
+
+echo "== re-installing over a member named Beyond Bot that someone can log in to"
+$cli extension:disable sethmorrow/beyondbot >/dev/null
+$cli extension:purge sethmorrow/beyondbot >/dev/null
+php "$here/bot_account.php" "$work/board" lock-out >/dev/null
+out=$($cli extension:enable sethmorrow/beyondbot 2>&1 || true)
+state=$(php "$here/bot_account.php" "$work/board")
+python3 - "$out" "$state" <<'PY'
+import json, sys
+out, s = sys.argv[1], json.loads(sys.argv[2])
+checks = [
+    (not s["enabled"], "the extension is not enabled over someone's account"),
+    (s["config_user_id"] == 0, "that account is not made the bot"),
+    # The ACP shows the sentence (checked in a browser); the CLI prints its key.
+    ("already exists" in out or "BEYONDBOT_NAME_TAKEN" in out, "the admin is told why"),
+]
+for ok, what in checks:
+    print(("PASS" if ok else "FAIL") + "  " + what)
+if not all(ok for ok, _ in checks):
+    print(out)
+    sys.exit(1)
+PY
+
+echo "== after the admin renames that member, the extension installs"
+php "$here/bot_account.php" "$work/board" rename >/dev/null
+# A failed enable leaves phpBB's cached extension list stale.
+$cli cache:purge >/dev/null
+$cli extension:enable sethmorrow/beyondbot >/dev/null
+state=$(php "$here/bot_account.php" "$work/board")
+python3 - "$state" <<'PY'
+import json, sys
+s = json.loads(sys.argv[1])
+ok = s["enabled"] and len(s["ids"]) == 1 and s["config_user_id"] == s["ids"][0]
+print(("PASS" if ok else "FAIL") + "  a new bot member is made once the name is free", "" if ok else s)
+sys.exit(0 if ok else 1)
+PY

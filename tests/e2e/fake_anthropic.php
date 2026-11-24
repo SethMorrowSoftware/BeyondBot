@@ -87,6 +87,13 @@ if (str_contains($first, 'MARKER_INJECT'))
 	]], 'end_turn', $model);
 }
 
+if (str_contains($first, 'MARKER_FAIL2') && $is_tool_turn)
+{
+	// The first call (a lookup) succeeded and is paid for; the second fails.
+	header('x-should-retry: false');
+	error_reply(529, 'overloaded_error', 'Overloaded');
+}
+
 if (!$is_tool_turn)
 {
 	// First call: think, then look up "put".

@@ -45,6 +45,7 @@ final class LimitsTest extends TestCase
 			'unapproved'      => [[], ['visibility' => 'unapproved'], [], limits::WAIT, 'waiting for moderator approval'],
 			'off'             => [['enabled' => false], [], [], limits::WAIT, 'bot switched off'],
 			'no key'          => [['has_key' => false], [], [], limits::WAIT, 'no API key'],
+			'api error'       => [['api_error' => true], [], [], limits::WAIT, 'paused after an API error'],
 			'no docs'         => [['has_knowledge' => false], [], [], limits::WAIT, 'docs index not loaded yet'],
 			'cap'             => [[], [], ['month_spent_micro' => 50000000], limits::WAIT, 'monthly spend cap reached'],
 			'cap zero'        => [['month_cap_micro' => 0], [], [], limits::WAIT, 'monthly spend cap reached'],

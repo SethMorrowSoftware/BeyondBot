@@ -29,7 +29,7 @@ class limits
 	public const WAIT = 'wait';
 
 	/**
-	 * @param array $s settings: enabled, has_key, has_knowledge, forum_ids[], group_ids[], min_posts,
+	 * @param array $s settings: enabled, has_key, api_error, has_knowledge, forum_ids[], group_ids[], min_posts,
 	 *                 user_daily, topic_max, board_daily, month_cap_micro, blocked_topics[]
 	 * @param array $q facts about the question: forum_id, topic_id, topic_locked,
 	 *                 asker_is_bot, asker_ignored (banned/inactive/anonymous), asker_group_ids[],
@@ -95,6 +95,13 @@ class limits
 		if (empty($s['has_key']))
 		{
 			return [self::WAIT, 'no API key'];
+		}
+		if (!empty($s['api_error']))
+		{
+			// The API refused the key, credit or model. Every call would
+			// fail the same way, so nothing is sent until the admin
+			// clears the error or saves a new key.
+			return [self::WAIT, 'paused after an API error'];
 		}
 		if (empty($s['has_knowledge']))
 		{

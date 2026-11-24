@@ -24,5 +24,7 @@ $lang = array_merge($lang, [
 	'LOG_BEYONDBOT_SETTINGS' => '<strong>Beyond Bot settings changed</strong>',
 	'LOG_BEYONDBOT_API_ERROR' => '<strong>Beyond Bot paused: the Claude API refused its key or model</strong><br>» %s',
 	'LOG_BEYONDBOT_KB_UPDATED' => '<strong>Beyond Bot docs index updated</strong><br>» %s',
+	'BEYONDBOT_NAME_TAKEN' => 'Beyond Bot was not installed: a member named "%s" already exists and can log in. Rename that member (or delete the account) and enable the extension again. The bot needs an account nobody can log in to.',
+
 	'LOG_BEYONDBOT_KB_ERROR' => '<strong>Beyond Bot could not update its docs index</strong><br>» %s',
 ]);

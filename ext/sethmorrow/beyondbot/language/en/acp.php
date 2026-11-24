@@ -31,7 +31,7 @@ $lang = array_merge($lang, [
 	'ACP_BEYONDBOT_CLEAR_ERROR' => 'Clear the error and try again',
 	'ACP_BEYONDBOT_UPDATE_DOCS' => 'Update the docs now',
 	'ACP_BEYONDBOT_DOCS_QUEUED' => 'The docs index will update on the next cron runs.',
-	'ACP_BEYONDBOT_ERROR_CLEARED' => 'Error cleared. Waiting questions will be tried again within the hour.',
+	'ACP_BEYONDBOT_ERROR_CLEARED' => 'Error cleared. Waiting questions will be tried again on the next cron run.',
 	'ACP_BEYONDBOT_BOT_MEMBER' => 'Bot member',
 
 	'ACP_BEYONDBOT_GENERAL' => 'Switch and key',

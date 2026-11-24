@@ -36,7 +36,10 @@ class process_queue extends \phpbb\cron\task\base
 
 	public function is_runnable()
 	{
-		return (bool) $this->config['beyondbot_enabled'] && (int) $this->config['beyondbot_user_id'] > 0;
+		// Paused after an API error (bad key, no credit, model refused)
+		// until the admin clears it: see worker::failed_call().
+		return (bool) $this->config['beyondbot_enabled'] && (int) $this->config['beyondbot_user_id'] > 0
+			&& (string) $this->config['beyondbot_last_error'] === '';
 	}
 
 	public function should_run()

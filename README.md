@@ -44,7 +44,9 @@ a Claude API key from [console.anthropic.com](https://console.anthropic.com).
    nothing to run with Composer.)
 2. In the ACP, **Customise > Manage extensions**, enable **Beyond Bot**.
    This creates the member "Beyond Bot" (rank "AI helper", no password,
-   nobody can log in as it). The bot starts switched **off**.
+   nobody can log in as it). The bot starts switched **off**. If a
+   member named "Beyond Bot" already exists and can log in, the install
+   stops and says so: rename that member first.
 3. Open **Extensions > Beyond Bot > Settings**:
    - paste the API key (it is stored in the database, never shown again
      and never sent anywhere but Anthropic's API),

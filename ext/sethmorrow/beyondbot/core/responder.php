@@ -81,15 +81,23 @@ class responder
 		for ($round = 0; $round <= self::MAX_ROUNDS; $round++)
 		{
 			$last = ($round === self::MAX_ROUNDS);
-			$result = $this->gateway->create([
-				'model' => $this->options['model'],
-				'max_tokens' => (int) $this->options['max_tokens'],
-				'effort' => $this->options['effort'],
-				'system' => $this->options['system'],
-				'tools' => self::tools(),
-				'tool_choice' => $last ? 'none' : 'auto',
-				'messages' => $messages,
-			]);
+			try
+			{
+				$result = $this->gateway->create([
+					'model' => $this->options['model'],
+					'max_tokens' => (int) $this->options['max_tokens'],
+					'effort' => $this->options['effort'],
+					'system' => $this->options['system'],
+					'tools' => self::tools(),
+					'tool_choice' => $last ? 'none' : 'auto',
+					'messages' => $messages,
+				]);
+			}
+			catch (gateway_error $e)
+			{
+				$e->calls = $calls;
+				throw $e;
+			}
 			foreach ($usage as $k => $v)
 			{
 				$usage[$k] = $v + (int) ($result['usage'][$k] ?? 0);

@@ -75,6 +75,7 @@ class main_module
 		if ($request->is_set_post('clear_error'))
 		{
 			$config->set('beyondbot_last_error', '');
+			$store->wake_waiting();
 			trigger_error($language->lang('ACP_BEYONDBOT_ERROR_CLEARED') . adm_back_link($this->u_action));
 		}
 
@@ -140,7 +141,12 @@ class main_module
 				if ($new_key !== '')
 				{
 					$config_text->set('beyondbot_api_key', $new_key);
-					$config->set('beyondbot_last_error', '');
+					if ((string) $config['beyondbot_last_error'] !== '')
+					{
+						// A new key is the usual fix for a refused one.
+						$config->set('beyondbot_last_error', '');
+						$store->wake_waiting();
+					}
 				}
 				if ($request->variable('beyondbot_remove_key', 0))
 				{

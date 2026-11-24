@@ -60,8 +60,17 @@ class output_filter
 			{
 				continue;
 			}
-			$part = $this->filter_urls($part);
-			$part = $this->unwrap_disallowed_tags($part);
+			// Until nothing changes: removing one tag can join the pieces
+			// around it into a new one ("[ur[color]l=..."), and a link
+			// dropped to its label can do the same. Every pass that
+			// changes anything makes the text shorter, so this ends.
+			do
+			{
+				$before = $part;
+				$part = $this->unwrap_disallowed_tags($part);
+				$part = $this->filter_urls($part);
+			}
+			while ($part !== $before);
 			$part = $this->defuse_self_mention($part);
 			$parts[$i] = $part;
 		}

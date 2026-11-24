@@ -1,6 +1,7 @@
 <?php
 use PHPUnit\Framework\TestCase;
 use sethmorrow\beyondbot\core\gateway;
+use sethmorrow\beyondbot\core\gateway_error;
 use sethmorrow\beyondbot\core\knowledge;
 use sethmorrow\beyondbot\core\responder;
 
@@ -86,6 +87,28 @@ final class ResponderTest extends TestCase
 		$a = $this->responder($g)->answer('Q');
 		$this->assertSame(['claude-sonnet-5-5', 'claude-opus-5'], array_column($a['calls'], 'model'));
 		$this->assertSame('claude-opus-5', $a['model']);
+	}
+
+	public function testAFailedCallCarriesThePaidCallsBeforeIt(): void
+	{
+		$g = new FakeGateway(function ($r, $n) {
+			if ($n === 1)
+			{
+				return self::reply('tool_use', [['id' => 'a', 'name' => 'search_docs', 'input' => ['query' => 'q']]]);
+			}
+			throw new gateway_error(gateway_error::RETRY, 'overloaded');
+		});
+		try
+		{
+			$this->responder($g)->answer('Q');
+			$this->fail('no exception');
+		}
+		catch (gateway_error $e)
+		{
+			$this->assertCount(1, $e->calls);
+			$this->assertSame('claude-sonnet-5-5', $e->calls[0]['model']);
+			$this->assertSame(10, $e->calls[0]['usage']['input']);
+		}
 	}
 
 	public function testToolResults(): void

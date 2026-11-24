@@ -23,6 +23,13 @@ class gateway_error extends \RuntimeException
 
 	public string $kind;
 
+	/**
+	 * Calls that succeeded (and were paid for) before this one failed,
+	 * as responder::answer() records them: list of {model, usage}.
+	 * The worker logs their cost, so the spend cap counts them.
+	 */
+	public array $calls = [];
+
 	public function __construct(string $kind, string $message, ?\Throwable $previous = null)
 	{
 		parent::__construct($message, 0, $previous);
