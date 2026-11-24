@@ -137,6 +137,7 @@ class worker
 	{
 		$job_id = (int) $job['job_id'];
 		$started = microtime(true);
+		$board_tags = $this->forum->board_tags();
 		$responder = new responder(
 			($this->gateway_factory)($this->settings->api_key(), (string) $this->settings->get('api_base')),
 			$this->knowledge,
@@ -144,7 +145,7 @@ class worker
 				'model' => $this->settings->model(),
 				'effort' => (string) ($this->settings->get('effort') ?: 'medium'),
 				'max_tokens' => max(1024, (int) $this->settings->get('max_tokens')),
-				'system' => $this->settings->system_prompt(),
+				'system' => $this->settings->system_prompt($board_tags),
 			]
 		);
 		$user_turn = prompt::user_turn(
@@ -170,7 +171,7 @@ class worker
 			$this->store->log($log + ['outcome' => 'refused', 'detail' => 'Claude declined to answer']);
 			return 'skipped';
 		}
-		$filter = new output_filter($this->settings->domains(), max(500, (int) $this->settings->get('max_chars')), $this->settings->bot_name());
+		$filter = new output_filter($this->settings->domains(), max(500, (int) $this->settings->get('max_chars')), $this->settings->bot_name(), $board_tags);
 		$text = $filter->clean($r['text']);
 		if ($text === null)
 		{

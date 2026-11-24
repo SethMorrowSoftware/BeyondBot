@@ -25,9 +25,22 @@ class prompt
 	public const POST_CHARS = 4000;
 	public const TOPIC_CHARS = 24000;
 
-	public static function system(string $primer, string $extra = ''): string
+	/** What a board-specific BBCode is for, told to Claude only when the board has it. */
+	public const BOARD_TAG_NOTES = [
+		'dict' => 'This forum has a [dict] tag: [dict]open file[/dict] shows the words as a small link to that entry in the online Dictionary. Use it for a dictionary word named in a sentence or list item (a command, function, property, message, keyword or control structure), the first time you name it. Only letters, digits, spaces and - + . , _ work inside it. Never put [dict] inside [code].',
+	];
+
+	/** @param string[] $board_tags BBCodes this board has beyond the standard ones */
+	public static function system(string $primer, string $extra = '', array $board_tags = []): string
 	{
 		$text = trim($primer);
+		foreach ($board_tags as $tag)
+		{
+			if (isset(self::BOARD_TAG_NOTES[$tag]))
+			{
+				$text .= "\n\n" . self::BOARD_TAG_NOTES[$tag];
+			}
+		}
 		$extra = trim($extra);
 		if ($extra !== '')
 		{

@@ -130,6 +130,28 @@ class forum
 		return $out;
 	}
 
+	/**
+	 * The board's own BBCodes this extension knows how to use: [dict] from
+	 * the OXT stack tools extension, only in the form it checks
+	 * ([dict]{SIMPLETEXT}[/dict]), so a different tag of that name is left alone.
+	 *
+	 * @return string[]
+	 */
+	public function board_tags(): array
+	{
+		$result = $this->db->sql_query('SELECT bbcode_tag, bbcode_match FROM ' . BBCODES_TABLE . " WHERE bbcode_tag = 'dict'");
+		$tags = [];
+		while ($row = $this->db->sql_fetchrow($result))
+		{
+			if (preg_replace('/\s+/', '', strtolower((string) $row['bbcode_match'])) === '[dict]{simpletext}[/dict]')
+			{
+				$tags[] = 'dict';
+			}
+		}
+		$this->db->sql_freeresult($result);
+		return $tags;
+	}
+
 	/** Whether any visible post came after this one in its topic. */
 	public function has_later_posts(int $topic_id, int $post_id): bool
 	{

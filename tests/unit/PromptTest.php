@@ -63,4 +63,13 @@ final class PromptTest extends TestCase
 		$this->assertMatchesRegularExpression('/\[\d+ earlier posts left out\]/', $t);
 		$this->assertLessThan(prompt::TOPIC_CHARS + 6000, strlen($t));
 	}
+
+	public function testBoardTagNoteOnlyWhenTheBoardHasTheTag(): void
+	{
+		$this->assertStringNotContainsString('[dict]', prompt::system('Primer.'));
+		$with = prompt::system('Primer.', 'Be brief.', ['dict', 'unknown']);
+		$this->assertStringContainsString('[dict]open file[/dict]', $with);
+		$this->assertStringStartsWith('Primer.', $with);
+		$this->assertStringEndsWith('Be brief.', $with);
+	}
 }

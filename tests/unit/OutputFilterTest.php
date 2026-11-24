@@ -136,4 +136,62 @@ final class OutputFilterTest extends TestCase
 		$out = $this->f()->clean('Use [code][/code] here and [code] [/code] there.');
 		$this->assertStringNotContainsString('[b][/b]', $out);
 	}
+
+	public function testDictIsKeptOnlyWhenTheBoardHasIt(): void
+	{
+		$in = 'Use [dict]open file[/dict] to start.';
+		$this->assertSame('Use open file to start.', $this->f()->clean($in));
+		$with = new output_filter(output_filter::DEFAULT_DOMAINS, 6000, 'Beyond Bot', ['dict']);
+		$this->assertSame('Use [dict]open file[/dict] to start.', $with->clean($in));
+	}
+
+	public function testDictTakesOnlyWhatTheBoardTagRenders(): void
+	{
+		$f = new output_filter(output_filter::DEFAULT_DOMAINS, 6000, 'Beyond Bot', ['dict', 'img']);
+		// phpBB's SIMPLETEXT: letters, digits, spaces and - + . , _
+		$this->assertSame('[dict]textDecode[/dict] and [b]the "x" of[/b] and [b]put()[/b].',
+			$f->clean('[dict]textDecode[/dict] and [dict]the "x" of[/dict] and [dict]put()[/dict].'));
+		// empty, unclosed, stray and wrapped forms leave no raw tag behind
+		$this->assertSame('a b c [b]d[/b]', $f->clean('a [dict][/dict]b [dict]c [b]d[/b][/dict]'));
+		$this->assertSame('x y', $f->clean('x [dict]y'));
+		// a board tag the filter cannot check is never allowed
+		$this->assertSame('pic', $f->clean('[img]pic[/img]'));
+		// inside code it is code
+		$this->assertStringContainsString("[code]\nput [dict]x[/dict]\n[/code]", $f->clean("See:\n[code]\nput [dict]x[/dict]\n[/code]"));
+	}
+
+	public function testArrayKeysInProseAreKeptAndCannotFormat(): void
+	{
+		$z = output_filter::DEFUSE;
+		$out = $this->f()->clean("Inside the loop, tArray[each] is that key's value.\n\nRead tData[i] and tArr[b] here. A lone [/u] too.");
+		$this->assertStringContainsString('tArray[' . $z . 'each]', $out);
+		$this->assertStringContainsString('tData[' . $z . 'i]', $out);
+		$this->assertStringContainsString('tArr[' . $z . 'b]', $out);
+		$this->assertStringContainsString('[' . $z . '/u]', $out);
+		// Nothing left that phpBB would read as an open tag.
+		$this->assertDoesNotMatchRegularExpression('#\[(b|i|u)\]#', $out);
+		// What a reader sees is the text as written.
+		$this->assertSame("Inside the loop, tArray[each] is that key's value.\n\nRead tData[i] and tArr[b] here. A lone [/u] too.", str_replace($z, '', $out));
+	}
+
+	public function testPairedTagsAndListsStay(): void
+	{
+		$in = "Use [b]put[/b] and [i]get[/i].\n[list]\n[*]one\n[*]two with tList[*] inside\n[/list]\nA stray [*] here.";
+		$out = $this->f()->clean($in);
+		$this->assertStringContainsString('[b]put[/b] and [i]get[/i]', $out);
+		$this->assertStringContainsString("[list]\n[*]one\n[*]two", $out);
+		$this->assertStringContainsString('A stray [' . output_filter::DEFUSE . '*] here.', $out);
+	}
+
+	public function testAQuoteAroundCodeStaysPaired(): void
+	{
+		$in = "[quote]Try this:\n[code]put tA[i] into x[/code]\n[/quote]\nDone.";
+		$this->assertSame($in, $this->f()->clean($in));
+	}
+
+	public function testUnknownTagsAreDefusedNotDropped(): void
+	{
+		$out = $this->f()->clean('Set tOpts[timeout] and [spoiler]x[/spoiler].');
+		$this->assertSame('Set tOpts[' . output_filter::DEFUSE . 'timeout] and x.', $out);
+	}
 }
