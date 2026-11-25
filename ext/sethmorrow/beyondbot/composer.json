@@ -3,7 +3,7 @@
 	"type": "phpbb-extension",
 	"description": "Beyond Bot: a forum member, powered by Claude, that answers OpenXTalk and xTalk Suite questions when someone writes @Beyond Bot in chosen forums.",
 	"homepage": "https://github.com/SethMorrowSoftware/BeyondBot",
-	"version": "1.1.0",
+	"version": "1.1.1",
 	"time": "2026-11-24",
 	"license": "GPL-2.0-only",
 	"authors": [
