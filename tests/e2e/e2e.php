@@ -166,6 +166,9 @@ $rank = one('SELECT rank_title FROM ' . RANKS_TABLE . ' WHERE rank_id = ' . (int
 check($rank && $rank['rank_title'] === 'AI helper', 'the bot wears the "AI helper" rank');
 check((int) $config['beyondbot_enabled'] === 0, 'the bot is off after install');
 check((string) $config['beyondbot_forum_ids'] === '', 'no forum is allowed after install');
+check((int) $config['beyondbot_reports_enabled'] === 1, 'saving bug reports is on after install (it only acts where the bot answers)');
+check((string) $config['beyondbot_report_forum_ids'] === '', 'no forum is read for reports after install');
+check(one('SELECT COUNT(*) AS n FROM ' . $table_prefix . 'beyondbot_reports') !== null, 'install made the reports table');
 
 // ------------------------------------------------------------------ docs index
 $updater = new \sethmorrow\beyondbot\core\kb_updater(
@@ -320,7 +323,8 @@ check(str_contains($r0['body']['system'][0]['text'] ?? '', 'You are Beyond Bot')
 check(($r0['body']['cache_control']['type'] ?? '') === 'ephemeral', 'the conversation is marked for caching (each lookup round reads the earlier ones from cache)');
 check(str_contains($r0['body']['system'][0]['text'] ?? '', '[dict]open file[/dict]'), "Claude is told about the board's [dict] tag");
 $tool_names = array_column($r0['body']['tools'] ?? [], 'name');
-check($tool_names === ['get_dictionary_entry', 'search_docs'], 'Claude gets exactly the two read-only tools', json_encode($tool_names));
+check($tool_names === ['get_dictionary_entry', 'search_docs', 'record_bug_report'], 'Claude gets the two read-only tools and the bug report tool', json_encode($tool_names));
+check(str_contains($r0['body']['system'][0]['text'] ?? '', 'record_bug_report tool'), 'the system prompt says when to save a report');
 $turn = $r0['body']['messages'][0]['content'] ?? '';
 check(str_contains($turn, '<question post_id="' . $question['post_id'] . '"') && str_contains($turn, 'How do I put text into a field?'), 'the question goes in a <question> block');
 check(!str_contains(json_encode($r0['body']), 'sk-ant-test'), 'the key never appears in what Claude reads');
@@ -497,6 +501,110 @@ check(($reqs[$n]['body']['model'] ?? '') === 'claude-future-9', 'a custom model 
 $lf = one('SELECT cost_micro FROM ' . $prefix . "beyondbot_log WHERE outcome = 'answered' AND post_id = " . $pf['post_id']);
 $fable = (int) ceil(1500 * 8 + 80 * 40 + 2500 * 10 + 1000 * 8 + 200 * 40 + 3000 * 0.5);
 check($lf && (int) $lf['cost_micro'] === $fable, 'an unpriced model is charged at the dearest known prices', $lf ? $lf['cost_micro'] : '');
+
+// ------------------------------------------------------------------ bug reports
+$config->set('beyondbot_model', 'claude-sonnet-5-5');
+$config->set('beyondbot_custom_model', '');
+$config->set('beyondbot_user_daily', 100);
+$reports = $phpbb_container->get('sethmorrow.beyondbot.reports');
+$report_count = fn () => (int) one('SELECT COUNT(*) AS n FROM ' . $prefix . 'beyondbot_reports')['n'];
+$erin = member('Erin Engineer', 10);
+
+// Told to the bot: Claude saves a report, then answers as usual.
+$pb = post_as($erin, $forum_id, null, "@Beyond Bot MARKER_BUG my stack crashes when I save it to Z:", 'Crash on save');
+check((queued($pb['post_id'])['kind'] ?? null) === '', 'a mention is queued as an answer');
+$n = count(fake_requests());
+run_queue();
+$rb = $reports->for_topic($pb['topic_id']);
+check($rb !== null, 'a bug told to the bot is saved as a report');
+check($rb && $rb['title'] === 'Stack crashes when saving to a network drive' && $rb['component'] === 'IDE' && $rb['status'] === 'new', 'the report holds what Claude wrote', json_encode($rb));
+check($rb && $rb['source'] === 'mention' && (int) $rb['user_id'] === $erin && (int) $rb['post_id'] === $pb['post_id'] && (int) $rb['forum_id'] === $forum_id, 'the report names the post, the member and the forum');
+check($rb && $rb['steps'] === "1. Open a new stack\n2. Save it to Z:\\stacks", 'long fields keep their lines');
+check(count(bot_posts($pb['topic_id'])) === 1, 'the member still gets an answer');
+$reqs = fake_requests();
+check(str_contains(json_encode($reqs[$n + 1]['body']['messages'][2] ?? ''), 'Saved as report #' . (int) ($rb['report_id'] ?? 0)), 'Claude is told the report was saved');
+$lb = one('SELECT queries FROM ' . $prefix . "beyondbot_log WHERE outcome = 'answered' AND post_id = " . $pb['post_id']);
+check($lb && str_contains($lb['queries'], 'report: Saved as report #'), 'the answer log shows the report', $lb['queries'] ?? '');
+
+// A later post in the topic fills the report in; it never adds a second one or blanks a field.
+$pb2 = post_as($erin, $forum_id, $pb['topic_id'], '@Beyond Bot MARKER_BUG2 it is version 0.2.9');
+run_queue();
+$rb2 = $reports->for_topic($pb['topic_id']);
+check($report_count() === 1, 'one report per topic');
+check($rb2 && $rb2['version'] === '0.2.9' && (int) $rb2['post_id'] === $pb2['post_id'], 'a later post updates the report', json_encode($rb2));
+check($rb2 && $rb2['steps'] === $rb['steps'], 'an empty field in the update keeps what was there');
+
+// A second topic with the same title is flagged as a possible duplicate.
+$pb3 = post_as($alice, $forum_id, null, '@Beyond Bot MARKER_BUG same here', 'Me too');
+$config->set('beyondbot_user_daily', 100);
+run_queue();
+$rb3 = $reports->for_topic($pb3['topic_id']);
+check($rb3 && (int) $rb3['dup_of'] === (int) $rb['report_id'], 'a report like an earlier one points at it', json_encode($rb3));
+
+// Capture: every new topic in a ticked forum is read once, mention or not, and nothing is posted.
+$config->set('beyondbot_report_forum_ids', (string) $forum_id);
+$config->set('beyondbot_report_model', 'claude-haiku-5-5');
+$pc1 = post_as($erin, $forum_id, null, 'The IDE closes when I save to a network drive.', 'IDE closes on save');
+check((queued($pc1['post_id'])['kind'] ?? null) === 'report', 'a new topic in a report forum is queued for a report');
+$pr1 = post_as($erin, $forum_id, $pc1['topic_id'], 'Still happening.');
+check(queued($pr1['post_id']) === null, 'a reply without a mention is not read for a report');
+$n = count(fake_requests());
+run_queue();
+$reqs = fake_requests();
+check(count($reqs) === $n + 1, 'reading a topic is one call', (count($reqs) - $n) . ' calls');
+$cap = $reqs[$n]['body'] ?? [];
+check(($cap['model'] ?? '') === 'claude-haiku-5-5', 'it uses the report model (Haiku 5.5)');
+check(array_column($cap['tools'] ?? [], 'name') === ['record_bug_report'], 'it is offered only the report tool');
+check(($cap['output_config']['effort'] ?? '') === 'low' && (int) ($cap['max_tokens'] ?? 0) === 2000, 'at low effort and a small budget');
+check(str_contains($cap['system'][0]['text'] ?? '', 'bug reports section') && !str_contains($cap['system'][0]['text'] ?? '', 'You are Beyond Bot'), 'with its own short instructions');
+check(str_contains($cap['messages'][0]['content'] ?? '', 'The IDE closes when I save'), 'it reads the topic');
+$rc = $reports->for_topic($pc1['topic_id']);
+check($rc && $rc['source'] === 'forum', 'the topic is saved as a report');
+check(count(bot_posts($pc1['topic_id'])) === 0, 'nothing is posted in the topic');
+check((queued($pc1['post_id'])['status'] ?? '') === 'done', 'the job is done');
+$lc = one('SELECT * FROM ' . $prefix . "beyondbot_log WHERE post_id = " . $pc1['post_id']);
+check($lc && $lc['outcome'] === 'report' && $lc['model'] === 'claude-haiku-5-5' && (int) $lc['cost_micro'] > 0, 'the read is logged and its cost counted', json_encode($lc));
+
+$pc2 = post_as($erin, $forum_id, null, 'MARKER_NOTBUG How do I sort lines?', 'Sorting question');
+run_queue();
+check($reports->for_topic($pc2['topic_id']) === null, 'a topic that is not a bug is not saved');
+check((queued($pc2['post_id'])['reason'] ?? '') === 'not a bug report', 'and its job says why');
+check((one('SELECT outcome FROM ' . $prefix . 'beyondbot_log WHERE post_id = ' . $pc2['post_id'])['outcome'] ?? '') === 'no_report', 'the read is logged');
+
+$pc3 = post_as($erin, $forum_id, null, '@Beyond Bot MARKER_BUG new topic with a mention', 'Mention in a report forum');
+check((queued($pc3['post_id'])['kind'] ?? null) === '', 'a mention in a report forum is answered, not only read');
+
+$config->set('beyondbot_reports_daily', $reports->count_since(time() - 86400));
+$pc4 = post_as($erin, $forum_id, null, 'Another crash', 'Over the report limit');
+$n = count(fake_requests());
+run_queue();
+check((queued($pc4['post_id'])['reason'] ?? '') === 'daily report limit reached', 'the daily report limit holds');
+check(count(fake_requests()) === $n + 2, 'nothing is sent to Claude for a topic over the limit (the two calls are the mention above)', (count(fake_requests()) - $n) . ' calls');
+check($reports->for_topic($pc3['topic_id']) === null && count(bot_posts($pc3['topic_id'])) === 1, 'over the limit, a mention is still answered but no report is saved');
+$config->set('beyondbot_reports_daily', 20);
+
+// The admin page's actions, on the service it uses.
+check($reports->set_status((int) $rb['report_id'], 'filed', 'issue #12', time()), 'a report can be marked as filed with a note');
+check($reports->get((int) $rb['report_id'])['note'] === 'issue #12', 'the note is kept');
+check(!$reports->set_status((int) $rb['report_id'], 'bogus', '', time()), 'an unknown status is refused');
+check($reports->total('filed') === 1 && count($reports->list('filed', 10)) === 1, 'reports can be listed by status');
+$url = \sethmorrow\beyondbot\core\reports::github_url('SethMorrowSoftware/OpenXTalk-Beyond', $reports->get((int) $rb['report_id']), 'https://board/viewtopic.php?p=1');
+check(str_starts_with($url, 'https://github.com/SethMorrowSoftware/OpenXTalk-Beyond/issues/new?title='), 'the GitHub button opens the new-issue form', $url);
+
+// Switched off: no tool, no note in the prompt, no capture. Answers are as they were before 1.1.0.
+$config->set('beyondbot_reports_enabled', 0);
+$pc5 = post_as($erin, $forum_id, null, 'Crash again, with reports off', 'Reports off');
+check(queued($pc5['post_id']) === null, 'with reports off, new topics are not read');
+$po2 = post_as($erin, $forum_id, null, '@Beyond Bot MARKER_BUG reports off', 'Reports off, asked');
+$n = count(fake_requests());
+$before = $report_count();
+run_queue();
+$reqs = fake_requests();
+check(array_column($reqs[$n]['body']['tools'] ?? [], 'name') === ['get_dictionary_entry', 'search_docs'], 'with reports off, Claude gets only the two read-only tools');
+check(!str_contains($reqs[$n]['body']['system'][0]['text'] ?? '', 'record_bug_report'), 'and the system prompt does not mention reports');
+check($report_count() === $before, 'and nothing is saved, even if Claude asks');
+$config->set('beyondbot_reports_enabled', 1);
+$config->set('beyondbot_report_forum_ids', '');
 
 // ------------------------------------------------------------------ done
 echo "\n$pass passed, $fail failed\n";

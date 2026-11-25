@@ -81,8 +81,31 @@ class settings
 		return prompt::system(
 			(string) $this->config_text->get('beyondbot_primer'),
 			(string) $this->config_text->get('beyondbot_extra'),
-			$board_tags
+			$board_tags,
+			$this->reports_enabled()
 		);
+	}
+
+	/** Bug reports on (1.1.0). False before the 1.1.0 migration has run. */
+	public function reports_enabled(): bool
+	{
+		return (bool) ($this->config['beyondbot_reports_enabled'] ?? false);
+	}
+
+	public function report_forum_ids(): array
+	{
+		return self::id_list((string) ($this->config['beyondbot_report_forum_ids'] ?? ''));
+	}
+
+	public function reports_daily(): int
+	{
+		return (int) ($this->config['beyondbot_reports_daily'] ?? 20);
+	}
+
+	public function report_model(): string
+	{
+		$m = (string) ($this->config['beyondbot_report_model'] ?? '');
+		return $m !== '' ? $m : 'claude-haiku-5-5';
 	}
 
 	public function domains(): array

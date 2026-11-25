@@ -9,11 +9,12 @@
 namespace sethmorrow\beyondbot\acp;
 
 use sethmorrow\beyondbot\core\pricing;
+use sethmorrow\beyondbot\core\reports;
 use sethmorrow\beyondbot\core\settings;
 use sethmorrow\beyondbot\core\store;
 
 /**
- * The admin panel: settings and the answer log.
+ * The admin panel: settings, the bug reports and the answer log.
  *
  * The API key is write-only here: the page shows its last four
  * characters, never the key, and an empty box on save keeps the old one.
@@ -37,6 +38,11 @@ class main_module
 		if ($mode === 'log')
 		{
 			$this->log_page($phpbb_container, $language);
+			return;
+		}
+		if ($mode === 'reports')
+		{
+			$this->reports_page($phpbb_container, $language);
 			return;
 		}
 		$this->settings_page($phpbb_container, $language);
@@ -109,6 +115,17 @@ class main_module
 			$forum_ids = array_map('intval', $request->variable('beyondbot_forum_ids', [0]));
 			$group_ids = array_map('intval', $request->variable('beyondbot_group_ids', [0]));
 			$enabled = $request->variable('beyondbot_enabled', 0);
+			$report_forum_ids = array_map('intval', $request->variable('beyondbot_report_forum_ids', [0]));
+			$report_model = $request->variable('beyondbot_report_model', 'claude-haiku-5-5');
+			if (!isset(pricing::CHOICES[$report_model]))
+			{
+				$report_model = 'claude-haiku-5-5';
+			}
+			$report_repo = trim($request->variable('beyondbot_report_repo', ''));
+			if ($report_repo !== '' && !preg_match('#^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$#', $report_repo))
+			{
+				$errors[] = $language->lang('ACP_BEYONDBOT_BAD_REPO');
+			}
 			$new_key = trim($request->variable('beyondbot_api_key', '', true));
 
 			if ($new_key !== '' && !preg_match('/^[A-Za-z0-9_\-]{20,300}$/', $new_key))
@@ -138,6 +155,11 @@ class main_module
 				$config->set('beyondbot_kb_url', $kb_url);
 				$config->set('beyondbot_api_base', $api_base);
 				$config_text->set('beyondbot_extra', $request->variable('beyondbot_extra', '', true));
+				$config->set('beyondbot_reports_enabled', $request->variable('beyondbot_reports_enabled', 0) ? 1 : 0);
+				$config->set('beyondbot_reports_daily', max(0, $request->variable('beyondbot_reports_daily', 20)));
+				$config->set('beyondbot_report_forum_ids', implode(',', array_filter(array_unique($report_forum_ids))));
+				$config->set('beyondbot_report_model', $report_model);
+				$config->set('beyondbot_report_repo', $report_repo);
 				if ($new_key !== '')
 				{
 					$config_text->set('beyondbot_api_key', $new_key);
@@ -170,6 +192,13 @@ class main_module
 		{
 			$models .= '<option value="' . $value . '"' . ($value === $config['beyondbot_model'] ? ' selected="selected"' : '') . '>' . htmlspecialchars($label) . '</option>';
 		}
+		$report_model = (string) $config['beyondbot_report_model'] ?: 'claude-haiku-5-5';
+		$report_models = '';
+		foreach (pricing::CHOICES as $value => $label)
+		{
+			$report_models .= '<option value="' . $value . '"' . ($value === $report_model ? ' selected="selected"' : '') . '>' . htmlspecialchars($label) . '</option>';
+		}
+		$report_forum_ids = settings::id_list((string) $config['beyondbot_report_forum_ids']);
 		$efforts = '';
 		foreach (self::EFFORTS as $e)
 		{
@@ -188,6 +217,11 @@ class main_module
 			'S_FORUM_CHECKLIST' => checklist::render('beyondbot_forum_ids', checklist::forum_items(make_forum_select($forum_ids, false, false, true, true, false, true))),
 			'S_GROUP_CHECKLIST' => checklist::render('beyondbot_group_ids', $this->group_items($c, $group_ids)),
 			'S_MODEL_OPTIONS' => $models,
+			'S_REPORT_FORUM_CHECKLIST' => checklist::render('beyondbot_report_forum_ids', checklist::forum_items(make_forum_select($report_forum_ids, false, false, true, true, false, true))),
+			'S_REPORT_MODEL_OPTIONS' => $report_models,
+			'BEYONDBOT_REPORTS_ENABLED' => (bool) $config['beyondbot_reports_enabled'],
+			'BEYONDBOT_REPORTS_DAILY' => (int) $config['beyondbot_reports_daily'],
+			'BEYONDBOT_REPORT_REPO' => (string) $config['beyondbot_report_repo'],
 			'S_EFFORT_OPTIONS' => $efforts,
 			'BEYONDBOT_CUSTOM_MODEL' => $config['beyondbot_custom_model'],
 			'BEYONDBOT_CUSTOM_PRICE_IN' => $config['beyondbot_custom_price_in'],
@@ -240,6 +274,135 @@ class main_module
 		}
 		$db->sql_freeresult($result);
 		return $items;
+	}
+
+	/**
+	 * The saved bug reports. Every field was written by Claude from a
+	 * member's post, so the template escapes all of it. Sending one to
+	 * GitHub is a link to GitHub's own new-issue form: the admin reads it
+	 * there and presses Submit, so the board never holds a GitHub token.
+	 */
+	protected function reports_page($c, $language)
+	{
+		global $phpbb_root_path, $phpEx;
+
+		$config = $c->get('config');
+		$request = $c->get('request');
+		$template = $c->get('template');
+		$user = $c->get('user');
+		$pagination = $c->get('pagination');
+		/** @var reports $reports */
+		$reports = $c->get('sethmorrow.beyondbot.reports');
+
+		$this->tpl_name = '@sethmorrow_beyondbot/acp_beyondbot_reports';
+		$this->page_title = $language->lang('ACP_BEYONDBOT_REPORTS');
+		add_form_key('sethmorrow_beyondbot_reports');
+
+		$status = $request->variable('status', '');
+		if ($status !== '' && !in_array($status, reports::STATUSES, true))
+		{
+			$status = '';
+		}
+		$back = $this->u_action . ($status !== '' ? '&amp;status=' . $status : '');
+
+		if ($request->is_set_post('delete'))
+		{
+			// phpBB's confirm box carries its own one-time key, so it is the
+			// CSRF check for a delete; the page's form key is not posted back.
+			$id = $request->variable('report_id', 0);
+			if (!confirm_box(true))
+			{
+				confirm_box(false, $language->lang('ACP_BEYONDBOT_REPORT_DELETE_CONFIRM'), build_hidden_fields([
+					'report_id' => $id,
+					'delete' => 1,
+					'status' => $status,
+				]));
+				// Cancelled: show the list again.
+			}
+			else
+			{
+				$reports->delete($id);
+				trigger_error($language->lang('ACP_BEYONDBOT_REPORT_DELETED') . adm_back_link($back));
+			}
+		}
+		if ($request->is_set_post('save'))
+		{
+			if (!check_form_key('sethmorrow_beyondbot_reports'))
+			{
+				trigger_error($language->lang('FORM_INVALID') . adm_back_link($back), E_USER_WARNING);
+			}
+			$reports->set_status($request->variable('report_id', 0), $request->variable('report_status', 'new'), $request->variable('report_note', '', true), time());
+			trigger_error($language->lang('ACP_BEYONDBOT_REPORT_SAVED') . adm_back_link($back));
+		}
+
+		$per_page = 25;
+		$start = max(0, $request->variable('start', 0));
+		$total = $reports->total($status);
+		$rows = $reports->list($status, $per_page, $start);
+		$names = [];
+		$ids = array_unique(array_filter(array_map(static fn ($r) => (int) $r['user_id'], $rows)));
+		if ($ids)
+		{
+			$db = $c->get('dbal.conn');
+			$result = $db->sql_query('SELECT user_id, username FROM ' . USERS_TABLE . ' WHERE ' . $db->sql_in_set('user_id', $ids));
+			while ($u = $db->sql_fetchrow($result))
+			{
+				$names[(int) $u['user_id']] = $u['username'];
+			}
+			$db->sql_freeresult($result);
+		}
+		$repo = (string) $config['beyondbot_report_repo'];
+		$board = generate_board_url();
+		foreach ($rows as $r)
+		{
+			$post_id = (int) $r['post_id'];
+			$public = $board . '/viewtopic.' . $phpEx . '?p=' . $post_id . '#p' . $post_id;
+			$template->assign_block_vars('report', [
+				'ID' => (int) $r['report_id'],
+				'TITLE' => (string) $r['title'],
+				'COMPONENT' => (string) $r['component'],
+				'SUMMARY' => (string) $r['summary'],
+				'STEPS' => (string) $r['steps'],
+				'EXPECTED' => (string) $r['expected'],
+				'ACTUAL' => (string) $r['actual'],
+				'PLATFORM' => (string) $r['platform'],
+				'VERSION' => (string) $r['version'],
+				'NOTE' => (string) $r['note'],
+				'STATUS' => (string) $r['status'],
+				'SOURCE' => (string) $r['source'],
+				'REPORTER' => $names[(int) $r['user_id']] ?? '',
+				'CREATED' => $user->format_date((int) $r['created']),
+				'UPDATED' => (int) $r['updated'] !== (int) $r['created'] ? $user->format_date((int) $r['updated']) : '',
+				'DUP_OF' => (int) $r['dup_of'],
+				'U_POST' => $post_id ? append_sid("{$phpbb_root_path}viewtopic.$phpEx", 'p=' . $post_id) . '#p' . $post_id : '',
+				'U_GITHUB' => $repo !== '' ? reports::github_url($repo, $r, $public) : '',
+			]);
+			foreach (reports::STATUSES as $s)
+			{
+				$template->assign_block_vars('report.status', [
+					'VALUE' => $s,
+					'LABEL' => $language->lang('ACP_BEYONDBOT_REPORT_STATUS_' . strtoupper($s)),
+					'SELECTED' => $s === $r['status'],
+				]);
+			}
+		}
+		foreach (array_merge([''], reports::STATUSES) as $s)
+		{
+			$template->assign_block_vars('filter', [
+				'VALUE' => $s,
+				'LABEL' => $language->lang($s === '' ? 'ACP_BEYONDBOT_REPORT_ALL' : 'ACP_BEYONDBOT_REPORT_STATUS_' . strtoupper($s)),
+				'COUNT' => $reports->total($s),
+				'U_FILTER' => $this->u_action . ($s !== '' ? '&amp;status=' . $s : ''),
+				'ACTIVE' => $s === $status,
+			]);
+		}
+		$pagination->generate_template_pagination($back, 'pagination', 'start', $total, $per_page, $start);
+		$template->assign_vars([
+			'U_ACTION' => $back,
+			'TOTAL' => $total,
+			'REPORT_REPO' => $repo,
+			'S_REPORTS_ON' => (bool) $config['beyondbot_reports_enabled'],
+		]);
 	}
 
 	protected function log_page($c, $language)
