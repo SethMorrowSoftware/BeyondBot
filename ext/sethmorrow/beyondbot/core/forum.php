@@ -216,10 +216,27 @@ class forum
 
 		$saved_data = $this->user->data;
 		$saved_ip = $this->user->ip ?? '';
+		$saved_page = $this->user->page;
 		try
 		{
-			$this->user->data = array_merge(is_array($saved_data) ? $saved_data : [], $bot);
+			// From the system cron (phpbbcli) there is no web session, so
+			// the global user lacks the keys a session sets; submit_post()
+			// and other extensions' posting listeners read them, and PHP
+			// logged a warning for each missing one on every answer.
+			$this->user->data = array_merge(is_array($saved_data) ? $saved_data : [], $bot, [
+				'is_registered' => true,
+				'is_bot' => false,
+			]);
 			$this->user->ip = $saved_ip !== '' ? $saved_ip : '127.0.0.1';
+			$this->user->page = (is_array($saved_page) ? $saved_page : []) + [
+				'page_name' => 'posting.' . $this->php_ext,
+				'page_dir' => '',
+				'query_string' => '',
+				'script_path' => '/',
+				'root_script_path' => '/',
+				'page' => 'posting.' . $this->php_ext,
+				'forum' => (int) $question['forum_id'],
+			];
 			$this->auth->acl($this->user->data);
 
 			$text = utf8_normalize_nfc($text);
@@ -260,9 +277,16 @@ class forum
 		{
 			$this->user->data = $saved_data;
 			$this->user->ip = $saved_ip;
-			if (is_array($saved_data) && $saved_data)
+			$this->user->page = $saved_page;
+			if (is_array($saved_data) && isset($saved_data['user_permissions'], $saved_data['user_type']))
 			{
 				$this->auth->acl($saved_data);
+			}
+			else
+			{
+				// No session user to go back to (the system cron): drop the
+				// bot's permissions rather than rebuild them for nobody.
+				$this->auth->acl = [];
 			}
 		}
 	}

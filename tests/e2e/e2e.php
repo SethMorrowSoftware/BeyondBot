@@ -606,6 +606,26 @@ check($report_count() === $before, 'and nothing is saved, even if Claude asks');
 $config->set('beyondbot_reports_enabled', 1);
 $config->set('beyondbot_report_forum_ids', '');
 
+// ------------------------------------------------------------------ the system cron
+// On the live board answers are posted by phpbbcli cron:run, with no web
+// session: that once logged about eleven PHP warnings per answer.
+$ps = post_as($erin, $forum_id, null, '@Beyond Bot posted from the system cron?', 'System cron test');
+$config->set('beyondbot_queue_last_run', 0);
+// A fresh cache, as after any admin change, so the cron process reads
+// the settings this test made and builds its own container.
+$phpbb_container->get('cache.driver')->save();
+exec(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($phpbb_root_path . 'bin/phpbbcli.php') . ' cache:purge 2>&1');
+$out = [];
+exec(escapeshellarg(PHP_BINARY) . ' -d error_reporting=-1 -d display_errors=stderr -d log_errors=0 '
+	. escapeshellarg($phpbb_root_path . 'bin/phpbbcli.php') . ' cron:run -vvv 2>&1', $out, $rc);
+$out = implode("\n", $out);
+$job = one('SELECT status, reply_post_id FROM ' . $prefix . 'beyondbot_queue WHERE post_id = ' . $ps['post_id']);
+check($job && $job['status'] === 'done' && (int) $job['reply_post_id'] > 0, 'the system cron answers', json_encode($job) . ' rc=' . $rc . ' ' . $out
+	. ' pending: ' . json_encode(all('SELECT job_id, post_id, status, next_try, kind FROM ' . $prefix . "beyondbot_queue WHERE status = 'pending'")));
+check(!preg_match('/(Warning|Notice|Deprecated):|Undefined (array key|index|variable)/', $out), 'and logs no PHP warnings while posting', $out);
+$sp = one('SELECT poster_id, post_username FROM ' . POSTS_TABLE . ' WHERE post_id = ' . (int) ($job['reply_post_id'] ?? 0));
+check($sp && (int) $sp['poster_id'] === $bot_id, 'the reply is posted as Beyond Bot', json_encode($sp));
+
 // ------------------------------------------------------------------ done
 echo "\n$pass passed, $fail failed\n";
 exit($fail ? 1 : 0);
