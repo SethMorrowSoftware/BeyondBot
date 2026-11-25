@@ -17,6 +17,13 @@ OpenXTalk-Beyond and xTalk Suite documentation.
   cost and the docs it looked up.
 - The model is a setting: Sonnet 5.5 by default, Opus 5.5, Haiku 5.5 or
   Fable 5.2 from a list, or any other model id with its prices.
+- It saves bug reports for the maintainers: when a member tells it about
+  a bug in OXT-Beyond or an xTalk Suite extension, it files a short
+  report on the ACP's **Bug reports** page as well as answering. Each
+  report has a status, a note, and a **Create GitHub issue** button that
+  opens GitHub's own new-issue form filled in, so the board never holds
+  a GitHub token. It can also read every new topic in forums you tick
+  (a Bug Reports section, say) with a cheap model, mention or not.
 
 ## How it works
 
@@ -29,8 +36,10 @@ OpenXTalk-Beyond and xTalk Suite documentation.
    sites, no images, no mention of itself) and posted as Beyond Bot.
 
 Forum posts are treated as material to answer, never as instructions:
-they are fenced off in the prompt, the bot has no tools that change
-anything, and its output is filtered before it is posted.
+they are fenced off in the prompt, the bot's only tool that writes
+anything is the one that saves a bug report to its own table (shown to
+admins only, every field escaped), and its output is filtered before it
+is posted.
 
 ## Installing
 
@@ -84,6 +93,10 @@ Recommended:
 | Effort | Medium | how hard the model thinks; higher costs more |
 | Sites answers may link to | openxtalk.org, github.com, sethmorrowsoftware.github.io | |
 | Docs bundle | this repository's `knowledge` release | rebuilt weekly from OXT-Beyond and the xTalk Suite |
+| Save bug reports | on | only where the bot answers, unless you tick forums below |
+| Also read every new topic in | none | each new topic there costs about a tenth of a cent on Haiku 5.5 |
+| New reports per day, whole board | 20 | one report per topic; later posts fill it in |
+| GitHub repository for issues | SethMorrowSoftware/OpenXTalk-Beyond | where the Create GitHub issue button points |
 
 If the API refuses the key (revoked, out of credit), the bot pauses, the
 status panel and the board's error log say why, and waiting questions are

@@ -14,7 +14,8 @@ use sethmorrow\beyondbot\core\store;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
 /**
- * Notices "@Beyond Bot" in a new or edited post and queues it.
+ * Notices "@Beyond Bot" in a new or edited post and queues it, and (with
+ * bug reports on) queues each new topic in a report-capture forum.
  *
  * Cheap on purpose: no network, no Claude, one SELECT and at most one
  * INSERT, and only for posts in the allowed forums. Everything else
@@ -51,7 +52,13 @@ class listener implements EventSubscriberInterface
 		}
 		$data = $event['data'];
 		$forum_id = (int) ($data['forum_id'] ?? 0);
-		if (!in_array($forum_id, $this->settings->forum_ids(), true))
+		$answers_here = in_array($forum_id, $this->settings->forum_ids(), true);
+		// A new topic (not a reply or an edit) in a forum ticked for bug
+		// report capture is read once for a report, mention or not.
+		$capture_here = $this->settings->reports_enabled()
+			&& ($event['mode'] ?? '') === 'post'
+			&& in_array($forum_id, $this->settings->report_forum_ids(), true);
+		if (!$answers_here && !$capture_here)
 		{
 			return;
 		}
@@ -65,10 +72,16 @@ class listener implements EventSubscriberInterface
 		{
 			return;
 		}
-		if (!mention::mentions(mention::own_words($this->utils, $xml), $this->settings->bot_name()))
+		// A mention gets an answer (which can also save a report), so it
+		// wins; the post's queue row is unique either way.
+		if ($answers_here && mention::mentions(mention::own_words($this->utils, $xml), $this->settings->bot_name()))
 		{
+			$this->store->enqueue((int) $data['post_id'], (int) $data['topic_id'], $forum_id, $poster, time());
 			return;
 		}
-		$this->store->enqueue((int) $data['post_id'], (int) $data['topic_id'], $forum_id, $poster, time());
+		if ($capture_here)
+		{
+			$this->store->enqueue((int) $data['post_id'], (int) $data['topic_id'], $forum_id, $poster, time(), store::KIND_REPORT);
+		}
 	}
 }

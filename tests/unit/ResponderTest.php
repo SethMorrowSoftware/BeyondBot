@@ -179,4 +179,73 @@ final class ResponderTest extends TestCase
 		$this->assertCount(1, $g->requests);
 		$this->assertFalse($a['recovered']);
 	}
+	public function testTheReportToolIsOfferedOnlyWithAReporter(): void
+	{
+		$this->assertNotContains(responder::REPORT_TOOL, array_column(responder::tools(), 'name'));
+		$t = responder::tools(true);
+		$this->assertSame(['get_dictionary_entry', 'search_docs', responder::REPORT_TOOL], array_column($t, 'name'));
+		$report = end($t)['inputSchema'];
+		$this->assertFalse($report['additionalProperties']);
+		$this->assertSame(array_keys($report['properties']), $report['required']);
+
+		$g = new FakeGateway(fn () => self::reply('end_turn', [], 'ok'));
+		$this->responder($g)->answer('Q');
+		$this->assertNotContains(responder::REPORT_TOOL, array_column($g->requests[0]['tools'], 'name'), 'reports off: Claude never sees the tool');
+
+		$g = new FakeGateway(fn () => self::reply('end_turn', [], 'ok'));
+		(new responder($g, new FakeKnowledge(), ['model' => 'm', 'system' => 'S', 'reporter' => fn () => 'saved']))->answer('Q');
+		$this->assertContains(responder::REPORT_TOOL, array_column($g->requests[0]['tools'], 'name'));
+		$this->assertArrayNotHasKey('reporter', $g->requests[0], 'the callable never reaches the API');
+	}
+
+	public function testAReportIsSavedWhileAnswering(): void
+	{
+		$saved = [];
+		$g = new FakeGateway(fn ($r, $n) => $n === 1
+			? self::reply('tool_use', [['id' => 't1', 'name' => responder::REPORT_TOOL, 'input' => ['title' => 'Crash on save', 'summary' => 's']]])
+			: self::reply('end_turn', [], 'Try this.'));
+		$a = (new responder($g, new FakeKnowledge(), ['model' => 'm', 'system' => 'S', 'reporter' => function (array $in) use (&$saved) {
+			$saved[] = $in;
+			return 'Saved as report #4.';
+		}]))->answer('Q');
+		$this->assertSame('Try this.', $a['text']);
+		$this->assertSame([['title' => 'Crash on save', 'summary' => 's']], $saved);
+		$this->assertSame(['report: Saved as report #4.'], $a['queries']);
+		$result = $g->requests[1]['messages'][2]['content'][0];
+		$this->assertSame('tool_result', $result['type']);
+		$this->assertStringContainsString('Saved as report #4.', json_encode($result));
+	}
+
+	public function testWithoutAReporterTheToolIsUnknown(): void
+	{
+		[, $label] = $this->responder(new FakeGateway(fn () => []))->run_tool(responder::REPORT_TOOL, ['title' => 'x']);
+		$this->assertSame('unknown tool: ' . responder::REPORT_TOOL, $label);
+	}
+
+	public function testCaptureIsOneCallWithOnlyTheReportTool(): void
+	{
+		$saved = 0;
+		$g = new FakeGateway(fn () => self::reply('tool_use', [
+			['id' => 't1', 'name' => responder::REPORT_TOOL, 'input' => ['title' => 'Crash', 'summary' => 's']],
+			['id' => 't2', 'name' => responder::REPORT_TOOL, 'input' => ['title' => 'Again', 'summary' => 's']],
+		], '', 'claude-haiku-5-5'));
+		$c = (new responder($g, new FakeKnowledge(), ['model' => 'claude-haiku-5-5', 'system' => 'CAP', 'effort' => 'low', 'max_tokens' => 2000,
+			'reporter' => function () use (&$saved) { $saved++; return 'Saved as report #1.'; }]))->capture('TURN');
+		$this->assertCount(1, $g->requests);
+		$this->assertSame([responder::REPORT_TOOL], array_column($g->requests[0]['tools'], 'name'));
+		$this->assertSame('CAP', $g->requests[0]['system']);
+		$this->assertSame('TURN', $g->requests[0]['messages'][0]['content']);
+		$this->assertTrue($c['reported']);
+		$this->assertSame(1, $saved, 'one report per topic, however many calls');
+		$this->assertSame('Saved as report #1.', $c['said']);
+		$this->assertSame('claude-haiku-5-5', $c['calls'][0]['model']);
+	}
+
+	public function testCaptureOfANonBug(): void
+	{
+		$g = new FakeGateway(fn () => self::reply('end_turn', [], 'NO'));
+		$c = (new responder($g, new FakeKnowledge(), ['model' => 'm', 'system' => 'S', 'reporter' => fn () => 'x']))->capture('T');
+		$this->assertFalse($c['reported']);
+		$this->assertSame('', $c['said']);
+	}
 }

@@ -21,6 +21,11 @@ class main_info
 					'auth' => 'ext_sethmorrow/beyondbot && acl_a_board',
 					'cat' => ['ACP_BEYONDBOT_TITLE'],
 				],
+				'reports' => [
+					'title' => 'ACP_BEYONDBOT_REPORTS',
+					'auth' => 'ext_sethmorrow/beyondbot && acl_a_board',
+					'cat' => ['ACP_BEYONDBOT_TITLE'],
+				],
 				'log' => [
 					'title' => 'ACP_BEYONDBOT_LOG',
 					'auth' => 'ext_sethmorrow/beyondbot && acl_a_viewlogs',

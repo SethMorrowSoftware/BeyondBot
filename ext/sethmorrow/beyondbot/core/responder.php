@@ -24,21 +24,65 @@ class responder
 	public const MAX_RECOVERY_TOKENS = 32000;
 	public const ANSWER_NOW = 'You have used up the room for looking things up and thinking. Write your answer to the question now, from what you have already found. Keep it short; if something is still unsure, say so plainly.';
 
+	public const REPORT_TOOL = 'record_bug_report';
+
 	protected gateway $gateway;
 	protected knowledge $knowledge;
 	protected array $options;
+	/** @var callable(array): string|null saves a bug report, returns what Claude is told */
+	protected $reporter;
 
 	/**
-	 * @param array $options model, effort, max_tokens, system
+	 * @param array $options model, effort, max_tokens, system, and
+	 *                       reporter: a callable that saves a bug report
+	 *                       (when set, Claude gets the record_bug_report tool)
 	 */
 	public function __construct(gateway $gateway, knowledge $knowledge, array $options)
 	{
 		$this->gateway = $gateway;
 		$this->knowledge = $knowledge;
+		$this->reporter = $options['reporter'] ?? null;
+		unset($options['reporter']);
 		$this->options = $options + ['effort' => 'medium', 'max_tokens' => 8000];
 	}
 
-	public static function tools(): array
+	/** The tool that saves a bug report. It writes only to the board's own reports table. */
+	public static function report_tool(): array
+	{
+		$text = static fn (string $d) => ['type' => 'string', 'description' => $d];
+		return [
+			'name' => self::REPORT_TOOL,
+			'description' => 'Save a bug report for the OXT-Beyond maintainers to look at later. Use it only when a post describes a bug in OXT-Beyond or an xTalk Suite extension: something that does not work as the docs say, a crash, a wrong result, a broken build or download. Not for questions, how-to help, feature requests or a mistake in the member\'s own script. Use it at most once per answer. It does not reply to anyone; still answer the member as usual.',
+			'inputSchema' => [
+				'type' => 'object',
+				'properties' => [
+					'title' => $text('A short, specific title, as a GitHub issue title (under 100 characters).'),
+					'component' => $text('The part affected: IDE, engine, web player, Android, standalone builder, dictionary or docs, or the extension name such as curlxt.'),
+					'summary' => $text('What goes wrong, in two to five plain sentences.'),
+					'steps' => $text('Steps or a short script that shows it, if the post gives them. Empty if not.'),
+					'expected' => $text('What should happen. Empty if not clear.'),
+					'actual' => $text('What happens instead, with any error text. Empty if not clear.'),
+					'platform' => $text('Operating system and device, if the post says. Empty if not.'),
+					'version' => $text('OXT-Beyond or extension version, if the post says. Empty if not.'),
+				],
+				'required' => ['title', 'component', 'summary', 'steps', 'expected', 'actual', 'platform', 'version'],
+				'additionalProperties' => false,
+			],
+		];
+	}
+
+	/** @return list<array> the docs tools, plus the report tool when $with_report */
+	public static function tools(bool $with_report = false): array
+	{
+		$tools = self::docs_tools();
+		if ($with_report)
+		{
+			$tools[] = self::report_tool();
+		}
+		return $tools;
+	}
+
+	protected static function docs_tools(): array
 	{
 		return [
 			[
@@ -90,7 +134,7 @@ class responder
 					'max_tokens' => (int) $this->options['max_tokens'],
 					'effort' => $this->options['effort'],
 					'system' => $this->options['system'],
-					'tools' => self::tools(),
+					'tools' => self::tools($this->reporter !== null),
 					'tool_choice' => $last ? 'none' : 'auto',
 					'messages' => $messages,
 				]);
@@ -145,7 +189,7 @@ class responder
 					'max_tokens' => min(self::MAX_RECOVERY_TOKENS, 2 * (int) $this->options['max_tokens']),
 					'effort' => 'low',
 					'system' => $this->options['system'],
-					'tools' => self::tools(),
+					'tools' => self::tools($this->reporter !== null),
 					'tool_choice' => 'none',
 					'messages' => $messages,
 				]);
@@ -175,6 +219,44 @@ class responder
 			'queries' => $queries,
 			'rounds' => count($calls),
 			'calls' => $calls,
+		];
+	}
+
+	/**
+	 * Read one new topic in a bug forum and save it as a report if it is
+	 * one. A single call with only the report tool: no docs lookups and
+	 * no reply, so it stays cheap (the admin picks a small model for it).
+	 *
+	 * @return array{reported:bool,said:string,stop_reason:?string,usage:array,model:string,calls:list<array>}
+	 */
+	public function capture(string $user_turn): array
+	{
+		$result = $this->gateway->create([
+			'model' => $this->options['model'],
+			'max_tokens' => (int) $this->options['max_tokens'],
+			'effort' => $this->options['effort'],
+			'system' => $this->options['system'],
+			'tools' => [self::report_tool()],
+			'tool_choice' => 'auto',
+			'messages' => [['role' => 'user', 'content' => $user_turn]],
+		]);
+		$said = '';
+		$reported = false;
+		foreach ($result['tool_calls'] ?? [] as $call)
+		{
+			if ($call['name'] === self::REPORT_TOOL && $this->reporter !== null && !$reported)
+			{
+				$said = (string) ($this->reporter)((array) $call['input']);
+				$reported = true;
+			}
+		}
+		return [
+			'reported' => $reported,
+			'said' => $said,
+			'stop_reason' => $result['stop_reason'] ?? null,
+			'usage' => $result['usage'],
+			'model' => $result['model'],
+			'calls' => [['model' => $result['model'], 'usage' => $result['usage']]],
 		];
 	}
 
@@ -209,6 +291,11 @@ class responder
 				return ['Nothing in the docs matched "' . $query . '". Try other words, or say you could not find it.', 'search: ' . $query . ' (0)'];
 			}
 			return [self::clip(self::format_hits($hits)), 'search: ' . $query . ' (' . count($hits) . ')'];
+		}
+		if ($name === self::REPORT_TOOL && $this->reporter !== null)
+		{
+			$said = (string) ($this->reporter)($input);
+			return [$said, 'report: ' . mb_substr($said, 0, 60)];
 		}
 		return ['Unknown tool "' . $name . '".', 'unknown tool: ' . $name];
 	}

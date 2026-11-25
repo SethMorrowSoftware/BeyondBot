@@ -38,8 +38,12 @@ class store
 		$this->log_table = $table_prefix . 'beyondbot_log';
 	}
 
+	/** Queue kinds: an answer to a mention, or a bug report read from a new topic. */
+	public const KIND_ANSWER = '';
+	public const KIND_REPORT = 'report';
+
 	/** Queue a post once; a second call for the same post (an edit) does nothing. */
-	public function enqueue(int $post_id, int $topic_id, int $forum_id, int $user_id, int $now): bool
+	public function enqueue(int $post_id, int $topic_id, int $forum_id, int $user_id, int $now, string $kind = self::KIND_ANSWER): bool
 	{
 		$sql = 'SELECT job_id FROM ' . $this->queue_table . ' WHERE post_id = ' . $post_id;
 		$result = $this->db->sql_query_limit($sql, 1);
@@ -61,7 +65,7 @@ class store
 			'created' => $now,
 			'reason' => '',
 			'reply_post_id' => 0,
-		]));
+		] + ($kind !== self::KIND_ANSWER ? ['kind' => $kind] : [])));
 		// A race with a second request for the same post hits the unique key: fine.
 		$ok = !$this->db->get_sql_error_triggered();
 		$this->db->sql_return_on_error(false);

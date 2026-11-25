@@ -20,6 +20,7 @@ $lang = array_merge($lang, [
 	'ACP_BEYONDBOT_TITLE' => 'Beyond Bot',
 	'ACP_BEYONDBOT_SETTINGS' => 'Settings',
 	'ACP_BEYONDBOT_LOG' => 'Answer log',
+	'ACP_BEYONDBOT_REPORTS' => 'Bug reports',
 
 	'LOG_BEYONDBOT_SETTINGS' => '<strong>Beyond Bot settings changed</strong>',
 	'LOG_BEYONDBOT_API_ERROR' => '<strong>Beyond Bot paused: the Claude API refused its key or model</strong><br>» %s',

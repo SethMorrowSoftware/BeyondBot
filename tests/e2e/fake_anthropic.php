@@ -12,6 +12,10 @@
  *   MARKER_AUTH    HTTP 401
  *   MARKER_RETRY   HTTP 529 overloaded
  *   MARKER_INJECT  an answer full of things the filter must remove
+ *   MARKER_BUG     a record_bug_report call, then the usual answer
+ *   MARKER_BUG2    the same, with a version and no steps (an update)
+ *   (report capture: only the report tool offered) a report, or "NO"
+ *                  when the post says MARKER_NOTBUG
  *   (none)         a lookup of "put", then an answer that uses it
  */
 
@@ -98,6 +102,33 @@ if (str_contains($first, 'MARKER_INJECT'))
 		. "Sort by tArray[each], then read tData[i] and keep going.\n"
 		. "[size=200]big[/size] [color=red]red[/color]",
 	]], 'end_turn', $model);
+}
+
+$report = static fn (array $over = []) => $over + [
+	'title' => 'Stack crashes when saving to a network drive',
+	'component' => 'IDE',
+	'summary' => 'Saving a stack to a mapped network drive closes the IDE.',
+	'steps' => "1. Open a new stack\n2. Save it to Z:\\stacks",
+	'expected' => 'The stack is saved.',
+	'actual' => 'The IDE closes with no message.',
+	'platform' => 'Windows 11',
+	'version' => '',
+];
+$tool_names = array_column($req['tools'] ?? [], 'name');
+if ($tool_names === ['record_bug_report'])
+{
+	// Report capture: one call, no lookups.
+	if (str_contains($first, 'MARKER_NOTBUG'))
+	{
+		reply([['type' => 'text', 'text' => 'NO']], 'end_turn', $model, ['input_tokens' => 400, 'output_tokens' => 5, 'cache_read_input_tokens' => 0]);
+	}
+	reply([['type' => 'tool_use', 'id' => 'toolu_cap_1', 'name' => 'record_bug_report', 'input' => $report()]],
+		'tool_use', $model, ['input_tokens' => 400, 'output_tokens' => 120, 'cache_read_input_tokens' => 0]);
+}
+if (str_contains($first, 'MARKER_BUG') && !$is_tool_turn)
+{
+	$input = str_contains($first, 'MARKER_BUG2') ? $report(['version' => '0.2.9', 'steps' => '']) : $report();
+	reply([['type' => 'tool_use', 'id' => 'toolu_bug_1', 'name' => 'record_bug_report', 'input' => $input]], 'tool_use', $model);
 }
 
 if (str_contains($first, 'MARKER_FAIL2') && $is_tool_turn)

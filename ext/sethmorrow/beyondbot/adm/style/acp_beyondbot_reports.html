@@ -1,0 +1,77 @@
+{% include 'overall_header.html' %}
+
+<h1>{{ lang('ACP_BEYONDBOT_REPORTS') }}</h1>
+<p>{{ lang('ACP_BEYONDBOT_REPORTS_INTRO') }}</p>
+{% if not S_REPORTS_ON %}<div class="errorbox"><p>{{ lang('ACP_BEYONDBOT_REPORTS_OFF') }}</p></div>{% endif %}
+
+<p>
+{% for f in loops.filter %}
+	{% if f.ACTIVE %}<strong>{{ f.LABEL }} ({{ f.COUNT }})</strong>{% else %}<a href="{{ f.U_FILTER }}">{{ f.LABEL }} ({{ f.COUNT }})</a>{% endif %}{% if not loop.last %} &middot; {% endif %}
+{% endfor %}
+</p>
+
+{% for r in loops.report %}
+<form id="beyondbot_report_{{ r.ID }}" method="post" action="{{ U_ACTION }}">
+<fieldset>
+	<legend>#{{ r.ID }} {{ r.TITLE|e }}</legend>
+	<dl>
+		<dt><label>{{ lang('ACP_BEYONDBOT_REPORT_FROM') }}</label></dt>
+		<dd>{{ r.REPORTER|e }}, {{ r.CREATED }}{% if r.UPDATED %} ({{ lang('ACP_BEYONDBOT_REPORT_UPDATED', r.UPDATED) }}){% endif %}
+			&middot; {{ lang('ACP_BEYONDBOT_REPORT_SOURCE_' ~ r.SOURCE|upper) }}
+			{% if r.U_POST %} &middot; <a href="{{ r.U_POST }}">{{ lang('ACP_BEYONDBOT_REPORT_POST') }}</a>{% endif %}
+			{% if r.DUP_OF %}<br><strong>{{ lang('ACP_BEYONDBOT_REPORT_DUP', r.DUP_OF) }}</strong>{% endif %}</dd>
+	</dl>
+	{% if r.COMPONENT or r.PLATFORM or r.VERSION %}
+	<dl>
+		<dt><label>{{ lang('ACP_BEYONDBOT_REPORT_WHERE') }}</label></dt>
+		<dd>{{ r.COMPONENT|e }}{% if r.PLATFORM %} &middot; {{ r.PLATFORM|e }}{% endif %}{% if r.VERSION %} &middot; {{ r.VERSION|e }}{% endif %}</dd>
+	</dl>
+	{% endif %}
+	<dl>
+		<dt><label>{{ lang('ACP_BEYONDBOT_REPORT_SUMMARY') }}</label></dt>
+		<dd style="white-space: pre-wrap;">{{ r.SUMMARY|e }}</dd>
+	</dl>
+	{% if r.STEPS %}
+	<dl>
+		<dt><label>{{ lang('ACP_BEYONDBOT_REPORT_STEPS') }}</label></dt>
+		<dd style="white-space: pre-wrap;">{{ r.STEPS|e }}</dd>
+	</dl>
+	{% endif %}
+	{% if r.EXPECTED %}
+	<dl>
+		<dt><label>{{ lang('ACP_BEYONDBOT_REPORT_EXPECTED') }}</label></dt>
+		<dd style="white-space: pre-wrap;">{{ r.EXPECTED|e }}</dd>
+	</dl>
+	{% endif %}
+	{% if r.ACTUAL %}
+	<dl>
+		<dt><label>{{ lang('ACP_BEYONDBOT_REPORT_ACTUAL') }}</label></dt>
+		<dd style="white-space: pre-wrap;">{{ r.ACTUAL|e }}</dd>
+	</dl>
+	{% endif %}
+	<dl>
+		<dt><label for="report_status_{{ r.ID }}">{{ lang('ACP_BEYONDBOT_REPORT_STATUS') ~ lang('COLON') }}</label></dt>
+		<dd><select id="report_status_{{ r.ID }}" name="report_status">
+			{% for s in r.status %}<option value="{{ s.VALUE }}"{% if s.SELECTED %} selected="selected"{% endif %}>{{ s.LABEL }}</option>{% endfor %}
+		</select></dd>
+	</dl>
+	<dl>
+		<dt><label for="report_note_{{ r.ID }}">{{ lang('ACP_BEYONDBOT_REPORT_NOTE') ~ lang('COLON') }}</label><br><span>{{ lang('ACP_BEYONDBOT_REPORT_NOTE_EXPLAIN') }}</span></dt>
+		<dd><textarea id="report_note_{{ r.ID }}" name="report_note" rows="2" cols="60">{{ r.NOTE|e }}</textarea></dd>
+	</dl>
+	<p class="submit-buttons">
+		<input type="hidden" name="report_id" value="{{ r.ID }}">
+		<input class="button1" type="submit" name="save" value="{{ lang('SUBMIT') }}">
+		{% if r.U_GITHUB %}<a class="button2" href="{{ r.U_GITHUB|e }}" target="_blank" rel="noopener noreferrer">{{ lang('ACP_BEYONDBOT_REPORT_GITHUB') }}</a>{% endif %}
+		<input class="button2" type="submit" name="delete" value="{{ lang('DELETE') }}">
+	</p>
+	{{ S_FORM_TOKEN }}
+</fieldset>
+</form>
+{% else %}
+<p>{{ lang('ACP_BEYONDBOT_REPORTS_EMPTY') }}</p>
+{% endfor %}
+
+{% if loops.report|length %}<div class="pagination">{% include 'pagination.html' %}</div>{% endif %}
+
+{% include 'overall_footer.html' %}

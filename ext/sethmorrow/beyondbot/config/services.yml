@@ -37,6 +37,12 @@ services:
             - '%core.root_path%'
             - '%core.php_ext%'
 
+    sethmorrow.beyondbot.reports:
+        class: sethmorrow\beyondbot\core\reports
+        arguments:
+            - '@dbal.conn'
+            - '%core.table_prefix%'
+
     sethmorrow.beyondbot.gateway_factory:
         class: sethmorrow\beyondbot\core\gateway_factory
         arguments:
@@ -52,6 +58,8 @@ services:
             - '@language'
             - '@log'
             - '@sethmorrow.beyondbot.gateway_factory'
+            - null
+            - '@sethmorrow.beyondbot.reports'
 
     sethmorrow.beyondbot.listener:
         class: sethmorrow\beyondbot\event\listener

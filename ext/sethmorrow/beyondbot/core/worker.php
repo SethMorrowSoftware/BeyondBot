@@ -31,10 +31,12 @@ class worker
 	protected $gateway_factory;
 	/** @var callable(): int */
 	protected $clock;
+	protected ?reports $reports;
 
 	public function __construct(settings $settings, store $store, forum $forum, knowledge $knowledge,
-		\phpbb\language\language $language, ?\phpbb\log\log_interface $log, callable $gateway_factory, ?callable $clock = null)
+		\phpbb\language\language $language, ?\phpbb\log\log_interface $log, callable $gateway_factory, ?callable $clock = null, ?reports $reports = null)
 	{
+		$this->reports = $reports;
 		$this->settings = $settings;
 		$this->store = $store;
 		$this->forum = $forum;
@@ -83,6 +85,10 @@ class worker
 		{
 			$this->store->update_job($job_id, ['status' => store::SKIPPED, 'reason' => 'post gone']);
 			return 'skipped';
+		}
+		if (($job['kind'] ?? '') === store::KIND_REPORT)
+		{
+			return $this->capture($job, $q);
 		}
 
 		$asker = (int) $q['poster_id'];
@@ -146,6 +152,7 @@ class worker
 				'effort' => (string) ($this->settings->get('effort') ?: 'medium'),
 				'max_tokens' => max(1024, (int) $this->settings->get('max_tokens')),
 				'system' => $this->settings->system_prompt($board_tags),
+				'reporter' => $this->reporter($q, 'mention'),
 			]
 		);
 		$user_turn = prompt::user_turn(
@@ -206,6 +213,117 @@ class worker
 		$this->store->update_job($job_id, ['status' => store::DONE, 'reason' => '', 'reply_post_id' => $reply_id]);
 		$this->store->log($log + ['outcome' => store::ANSWERED, 'reply_post_id' => $reply_id, 'detail' => self::ending($r)]);
 		return 'answered';
+	}
+
+	/**
+	 * The callable that saves a report for this question's topic, or null
+	 * when reports are off (then Claude never sees the tool).
+	 */
+	protected function reporter(array $q, string $source): ?callable
+	{
+		if (!$this->reports || !$this->settings->reports_enabled())
+		{
+			return null;
+		}
+		return function (array $input) use ($q, $source): string {
+			$fields = reports::clean($input);
+			if ($fields === null)
+			{
+				return 'Not saved: a report needs a title and a summary.';
+			}
+			$r = $this->reports->save($fields, [
+				'topic_id' => (int) $q['topic_id'],
+				'post_id' => (int) $q['post_id'],
+				'forum_id' => (int) $q['forum_id'],
+				'user_id' => (int) $q['poster_id'],
+				'source' => $source,
+			], $this->now(), $this->settings->reports_daily());
+			if (isset($r['error']))
+			{
+				return 'Not saved: ' . $r['error'] . '. Answer the member as usual.';
+			}
+			return ($r['updated'] ? 'Updated report #' : 'Saved as report #') . $r['id']
+				. ($r['dup_of'] ? ' (it may repeat report #' . $r['dup_of'] . ')' : '')
+				. '. The maintainers will see it. Now answer the member as usual, without mentioning the report.';
+		};
+	}
+
+	/**
+	 * A new topic in a bug forum, read once for a report. No reply is
+	 * posted. The member limits do not apply (nobody asked the bot), but
+	 * the switch, the key, the spend cap and the daily report limit do.
+	 */
+	protected function capture(array $job, array $q): string
+	{
+		$job_id = (int) $job['job_id'];
+		$now = $this->now();
+		$skip = function (string $reason) use ($job_id): string {
+			$this->store->update_job($job_id, ['status' => store::SKIPPED, 'reason' => $reason]);
+			return 'skipped';
+		};
+		if (!$this->reports || !$this->settings->reports_enabled() || !$this->settings->enabled())
+		{
+			return $skip('reports are off');
+		}
+		if (!in_array((int) $q['forum_id'], $this->settings->report_forum_ids(), true))
+		{
+			return $skip('not a report forum any more');
+		}
+		$visibility = self::visibility((int) $q['post_visibility']);
+		if ($visibility === 'deleted')
+		{
+			return $skip('post deleted');
+		}
+		if ($visibility === 'unapproved')
+		{
+			$this->store->update_job($job_id, ['next_try' => $now + 600, 'reason' => 'waiting for moderator approval']);
+			return 'waiting';
+		}
+		if ($this->settings->api_key() === '' || (string) $this->settings->get('last_error') !== '')
+		{
+			$this->store->update_job($job_id, ['next_try' => $now + 3600, 'reason' => 'no working API key']);
+			return 'waiting';
+		}
+		$cap = $this->settings->for_limits()['month_cap_micro'];
+		if ($this->store->month_spent($now) >= $cap)
+		{
+			$this->store->update_job($job_id, ['next_try' => $now + 3600, 'reason' => 'monthly spend cap reached']);
+			return 'waiting';
+		}
+		if ($this->reports->for_topic((int) $q['topic_id']) === null && $this->reports->count_since($now - 86400) >= $this->settings->reports_daily())
+		{
+			return $skip('daily report limit reached');
+		}
+
+		$started = microtime(true);
+		$base_log = ['job_id' => $job_id, 'post_id' => (int) $q['post_id'], 'topic_id' => (int) $q['topic_id'], 'user_id' => (int) $q['poster_id'], 'log_time' => $now];
+		$responder = new responder(
+			($this->gateway_factory)($this->settings->api_key(), (string) $this->settings->get('api_base')),
+			$this->knowledge,
+			[
+				'model' => $this->settings->report_model(),
+				'effort' => 'low',
+				'max_tokens' => 2000,
+				'system' => prompt::CAPTURE_SYSTEM,
+				'reporter' => $this->reporter($q, 'forum'),
+			]
+		);
+		$turn = prompt::capture_turn(
+			['title' => $q['topic_title'], 'forum_name' => $q['forum_name']],
+			['post_id' => (int) $q['post_id'], 'author' => $q['username'], 'text' => $q['text']]
+		);
+		try
+		{
+			$r = $responder->capture($turn);
+		}
+		catch (gateway_error $e)
+		{
+			return $this->failed_call($job, $base_log + $this->usage_log([], $started), $e);
+		}
+		$log = $base_log + $this->usage_log($r['calls'], $started);
+		$this->store->update_job($job_id, ['status' => $r['reported'] ? store::DONE : store::SKIPPED, 'reason' => $r['reported'] ? '' : 'not a bug report']);
+		$this->store->log($log + ['outcome' => $r['reported'] ? 'report' : 'no_report', 'detail' => $r['reported'] ? $r['said'] : 'read; not a bug report']);
+		return $r['reported'] ? 'reported' : 'skipped';
 	}
 
 	/** How the last call ended, for the log: "end_turn; thinking,text; 1520 chars", plus "after a retry". */

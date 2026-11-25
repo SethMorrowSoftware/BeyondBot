@@ -134,6 +134,31 @@
 </fieldset>
 
 <fieldset>
+	<legend>{{ lang('ACP_BEYONDBOT_REPORTS_HEAD') }}</legend>
+	<dl>
+		<dt><label for="beyondbot_reports_enabled">{{ lang('ACP_BEYONDBOT_REPORTS_ENABLED') ~ lang('COLON') }}</label><br><span>{{ lang('ACP_BEYONDBOT_REPORTS_ENABLED_EXPLAIN') }}</span></dt>
+		<dd><label><input type="radio" class="radio" id="beyondbot_reports_enabled" name="beyondbot_reports_enabled" value="1"{% if BEYONDBOT_REPORTS_ENABLED %} checked="checked"{% endif %}> {{ lang('YES') }}</label>
+			<label><input type="radio" class="radio" name="beyondbot_reports_enabled" value="0"{% if not BEYONDBOT_REPORTS_ENABLED %} checked="checked"{% endif %}> {{ lang('NO') }}</label></dd>
+	</dl>
+	<dl>
+		<dt><label>{{ lang('ACP_BEYONDBOT_REPORT_FORUMS') ~ lang('COLON') }}</label><br><span>{{ lang('ACP_BEYONDBOT_REPORT_FORUMS_EXPLAIN') }}</span></dt>
+		<dd><div id="beyondbot_report_forum_ids" style="max-height: 12em; overflow-y: auto;">{{ S_REPORT_FORUM_CHECKLIST }}</div></dd>
+	</dl>
+	<dl>
+		<dt><label for="beyondbot_report_model">{{ lang('ACP_BEYONDBOT_REPORT_MODEL') ~ lang('COLON') }}</label><br><span>{{ lang('ACP_BEYONDBOT_REPORT_MODEL_EXPLAIN') }}</span></dt>
+		<dd><select id="beyondbot_report_model" name="beyondbot_report_model">{{ S_REPORT_MODEL_OPTIONS }}</select></dd>
+	</dl>
+	<dl>
+		<dt><label for="beyondbot_reports_daily">{{ lang('ACP_BEYONDBOT_REPORTS_DAILY') ~ lang('COLON') }}</label></dt>
+		<dd><input type="number" min="0" id="beyondbot_reports_daily" name="beyondbot_reports_daily" value="{{ BEYONDBOT_REPORTS_DAILY }}"></dd>
+	</dl>
+	<dl>
+		<dt><label for="beyondbot_report_repo">{{ lang('ACP_BEYONDBOT_REPORT_REPO') ~ lang('COLON') }}</label><br><span>{{ lang('ACP_BEYONDBOT_REPORT_REPO_EXPLAIN') }}</span></dt>
+		<dd><input type="text" class="inputbox" id="beyondbot_report_repo" name="beyondbot_report_repo" value="{{ BEYONDBOT_REPORT_REPO|e }}" size="50"></dd>
+	</dl>
+</fieldset>
+
+<fieldset>
 	<legend>{{ lang('ACP_BEYONDBOT_CONTENT') }}</legend>
 	<dl>
 		<dt><label for="beyondbot_domains">{{ lang('ACP_BEYONDBOT_DOMAINS') ~ lang('COLON') }}</label><br><span>{{ lang('ACP_BEYONDBOT_DOMAINS_EXPLAIN') }}</span></dt>
